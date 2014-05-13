@@ -1,11 +1,10 @@
 #include "LLVMCodeGenerator.h"
 
-#include <llvm/InlineAsm.h>
+#include <llvm/IR/InlineAsm.h>
 #include <llvm/PassManager.h>
 #include <llvm/Support/ToolOutputFile.h>
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/raw_os_ostream.h>
-#include <llvm/Target/TargetData.h>
 #include <llvm/Assembly/PrintModulePass.h>
 
 LLVMCodeGenerator::LLVMCodeGenerator() 
@@ -39,7 +38,7 @@ bool LLVMCodeGenerator::build_ir(ASTNode* ast) {
 
 bool LLVMCodeGenerator::write_ll_file(const char* path) {
 	std::string error;
-	llvm::tool_output_file fdout(path, error, 0);
+	llvm::tool_output_file fdout(path, error, llvm::sys::fs::F_None);
 
 	if (!error.empty()) {
 		printf("%s\n", error.c_str());
@@ -206,7 +205,7 @@ const void* LLVMCodeGenerator::visit(ASTConstantArray* node) {
 	}
 	assert(v);
 
-	llvm::GlobalVariable* gv = new llvm::GlobalVariable(*_module, v->getType(), true, llvm::GlobalValue::PrivateLinkage, v, "", 0, false);
+	llvm::GlobalVariable* gv = new llvm::GlobalVariable(*_module, v->getType(), true, llvm::GlobalValue::PrivateLinkage, v, "", 0, llvm::GlobalVariable::NotThreadLocal);
 	gv->setUnnamedAddr(true);
 	llvm::Value* zero   = llvm::ConstantInt::get(llvm::Type::getInt32Ty(_context), 0);
 	llvm::Value* args[] = { zero, zero };

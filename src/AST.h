@@ -1,5 +1,4 @@
-#ifndef AST_H
-#define AST_H
+#pragma once
 
 #include "C3/C3.h"
 
@@ -233,5 +232,3 @@ class ASTNodeVisitor {
 		virtual const void* visit(ASTWhileLoop* node) { return nullptr; }
 		virtual ~ASTNodeVisitor() {}
 };
-
-#endif

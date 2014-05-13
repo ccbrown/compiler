@@ -1,5 +1,4 @@
-#ifndef C3_VARIABLE_H
-#define C3_VARIABLE_H
+#pragma once
 
 #include "C3Type.h"
 #include "../Token.h"
@@ -24,5 +23,3 @@ class C3Variable {
 };
 
 typedef std::shared_ptr<C3Variable> C3VariablePtr;
-
-#endif

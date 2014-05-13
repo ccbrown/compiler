@@ -1,5 +1,4 @@
-#ifndef TOKEN_H
-#define TOKEN_H
+#pragma once
 
 #include <memory>
 #include <string>
@@ -29,5 +28,3 @@ class Token {
 };
 
 typedef std::shared_ptr<Token> TokenPtr;
-
-#endif

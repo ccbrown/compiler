@@ -1,5 +1,4 @@
-#ifndef C3_TYPE_H
-#define C3_TYPE_H
+#pragma once
 
 #include <string>
 #include <memory>
@@ -72,5 +71,3 @@ class C3Type {
 		bool _is_defined;
 		C3StructDefinition _struct_def;
 };
-
-#endif

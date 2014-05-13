@@ -1,13 +1,12 @@
-#ifndef LLVM_CODE_GENERATOR_H
-#define LLVM_CODE_GENERATOR_H
+#pragma once
 
 #include "AST.h"
 
 #include <unordered_map>
 
-#include <llvm/Support/IRBuilder.h>
-#include <llvm/LLVMContext.h>
-#include <llvm/Module.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Analysis/Verifier.h>
 
 class LLVMCodeGenerator : public ASTNodeVisitor {
@@ -52,5 +51,3 @@ class LLVMCodeGenerator : public ASTNodeVisitor {
 		std::unordered_map<std::string, llvm::Value*> _named_values;
 		std::unordered_map<std::string, llvm::Type*> _named_types;
 };
-
-#endif

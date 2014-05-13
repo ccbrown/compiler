@@ -1,5 +1,4 @@
-#ifndef PARSER_H
-#define PARSER_H
+#pragma once
 
 #include "Token.h"
 #include "AST.h"
@@ -139,5 +138,3 @@ class Parser {
 
 		std::list<ParseError> _errors;
 };
-
-#endif

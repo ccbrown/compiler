@@ -1,5 +1,4 @@
-#ifndef C3_FUNCTION_H
-#define C3_FUNCTION_H
+#pragma once
 
 #include "C3Type.h"
 #include "C3FunctionSignature.h"
@@ -39,5 +38,3 @@ class C3Function {
 		TokenPtr _prototype;
 		TokenPtr _definition;
 };
-
-#endif

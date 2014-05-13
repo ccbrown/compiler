@@ -1,5 +1,4 @@
-#ifndef LEXED_FILE_H
-#define LEXED_FILE_H
+#pragma once
 
 #include "Token.h"
 #include "Lexer.h"
@@ -54,5 +53,3 @@ class LexedFileToken : public Token {
 		size_t _length;
 		std::shared_ptr<LexedFile> _file;
 };
-
-#endif

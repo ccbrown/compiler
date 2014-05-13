@@ -1,5 +1,4 @@
-#ifndef PREPROCESSOR_H
-#define PREPROCESSOR_H
+#pragma once
 
 #include "Token.h"
 #include "LexedFile.h"
@@ -37,5 +36,3 @@ class PPModifiedToken : public Token {
 		TokenPtr _base;
 		std::string _value;
 };
-
-#endif

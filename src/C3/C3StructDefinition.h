@@ -1,5 +1,4 @@
-#ifndef C3_STRUCT_DEFINITION_H
-#define C3_STRUCT_DEFINITION_H
+#pragma once
 
 #include <vector>
 #include <string>
@@ -26,5 +25,3 @@ class C3StructDefinition {
 	private:
 		std::vector<MemberVariable> _member_vars;
 };
-
-#endif

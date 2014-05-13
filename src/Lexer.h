@@ -1,5 +1,4 @@
-#ifndef LEXER_H
-#define LEXER_H
+#pragma once
 
 #include "Token.h"
 
@@ -27,5 +26,3 @@ class Lexer {
 	
 		TokenRange _read_token(const char* data, size_t size, size_t pos);
 };
-
-#endif

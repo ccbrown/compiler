@@ -1,5 +1,4 @@
-#ifndef C3_FUNCTION_SIGNATURE_H
-#define C3_FUNCTION_SIGNATURE_H
+#pragma once
 
 #include <vector>
 #include <string>
@@ -26,5 +25,3 @@ class C3FunctionSignature {
 
 		std::string _string;
 };
-
-#endif
