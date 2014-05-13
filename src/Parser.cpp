@@ -16,6 +16,12 @@ Parser::Parser() {
 	
 	_keywords.insert("asm");
 	_keywords.insert("return");
+	_keywords.insert("import");
+	_keywords.insert("if");
+	_keywords.insert("else");
+	_keywords.insert("while");
+	_keywords.insert("struct");
+	_keywords.insert("namespace");
 
 	// TODO: respect unary precedence
 	_binary_ops["."]  = { 110, false };
@@ -121,21 +127,21 @@ bool Parser::_peek(ParserTokenType type) {
 		case ptt_keyword:
 			return tok->type() == TokenTypeIdentifier && _keywords.count(tok->value()) > 0;
 		case ptt_keyword_asm:
-			return tok->type() == TokenTypeIdentifier && tok->value() == "asm";
+			return _peek(ptt_keyword) && tok->value() == "asm";
 		case ptt_keyword_return:
-			return tok->type() == TokenTypeIdentifier && tok->value() == "return";
+			return _peek(ptt_keyword) && tok->value() == "return";
 		case ptt_keyword_import:
-			return tok->type() == TokenTypeIdentifier && tok->value() == "import";
+			return _peek(ptt_keyword) && tok->value() == "import";
 		case ptt_keyword_if:
-			return tok->type() == TokenTypeIdentifier && tok->value() == "if";
+			return _peek(ptt_keyword) && tok->value() == "if";
 		case ptt_keyword_else:
-			return tok->type() == TokenTypeIdentifier && tok->value() == "else";
+			return _peek(ptt_keyword) && tok->value() == "else";
 		case ptt_keyword_while:
-			return tok->type() == TokenTypeIdentifier && tok->value() == "while";
+			return _peek(ptt_keyword) && tok->value() == "while";
 		case ptt_keyword_struct:
-			return tok->type() == TokenTypeIdentifier && tok->value() == "struct";
+			return _peek(ptt_keyword) && tok->value() == "struct";
 		case ptt_keyword_namespace:
-			return tok->type() == TokenTypeIdentifier && tok->value() == "namespace";
+			return _peek(ptt_keyword) && tok->value() == "namespace";
 		case ptt_number:
 			return tok->type() == TokenTypeNumber;
 		case ptt_end_token:
