@@ -5,9 +5,9 @@
 Lexer::Lexer() {}
 
 bool Lexer::lex(const char* data, size_t size, std::function<void(const TokenRange&)> lambda) {
-	bool lineFirst = true;
-	bool skipToNewLine = false;
-	bool skipToEndOfCommentBlock = false;
+	bool line_first = true;
+	bool skip_to_new_line = false;
+	bool skip_to_end_of_comment_block = false;
 
 	char c;
 	char prevc = '\0';
@@ -16,13 +16,13 @@ bool Lexer::lex(const char* data, size_t size, std::function<void(const TokenRan
 		size_t rem = size - i;
 		c = data[i];
 		
-		if (skipToEndOfCommentBlock) {
+		if (skip_to_end_of_comment_block) {
 			if (c != '*') {
 				continue;
 			}
 			if (rem >= 1 && data[i + 1] == '/') {
 				++i;
-				skipToEndOfCommentBlock = false;
+				skip_to_end_of_comment_block = false;
 			}
 			continue;
 		}
@@ -35,8 +35,8 @@ bool Lexer::lex(const char* data, size_t size, std::function<void(const TokenRan
 		if (c == '\r' || c == '\n') {
 			// newline
 			if (prevc != '\\') {
-				skipToNewLine = false;
-				lineFirst = true;
+				skip_to_new_line = false;
+				line_first = true;
 			}
 			if (c == '\r' && rem >= 2 && data[i + 1] == '\n') {
 				// cr+lf, skip an extra character
@@ -45,27 +45,27 @@ bool Lexer::lex(const char* data, size_t size, std::function<void(const TokenRan
 			continue;
 		}
 		
-		if (skipToNewLine) {
+		if (skip_to_new_line) {
 			continue;
 		}
 
 		if (c == '/' && rem >= 2) {
 			if (data[i + 1] == '/') {
 				// single line comment, advance to next line
-				skipToNewLine = true;
+				skip_to_new_line = true;
 				continue;
 			} else if (data[i + 1] == '*') {
 				// multi line comment, advance to next "*/", skipping the next asterisk
 				++i;
-				skipToEndOfCommentBlock = true;
+				skip_to_end_of_comment_block = true;
 				continue;
 			}
 		}
 
 		// read token
 		TokenRange token = _read_token(data, size, i);
-		token.flags |= (lineFirst ? TokenFlagLineFirst : 0);
-		lineFirst = false;
+		token.flags |= (line_first ? TokenFlagLineFirst : 0);
+		line_first = false;
 
 		lambda(token);
 		
@@ -155,15 +155,15 @@ TokenRange Lexer::_read_token(const char* data, size_t size, size_t pos) {
 		":>", "%:", "::"
 	};
 
-	size_t punctuatorLength = 1;
+	size_t punctuator_length = 1;
 	
 	for (size_t i = 0; i < sizeof(punctuators) / sizeof(char*); ++i) {
 		size_t len = strlen(punctuators[i]);
 		if (rem >= len && !memcmp(data + pos, punctuators[i], len)) {
-			punctuatorLength = len;
+			punctuator_length = len;
 			break;
 		}
 	}
 
-	return TokenRange(TokenTypePunctuator, pos, punctuatorLength);
+	return TokenRange(TokenTypePunctuator, pos, punctuator_length);
 }
