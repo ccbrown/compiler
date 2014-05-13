@@ -17,7 +17,6 @@ LLVMCodeGenerator::LLVMCodeGenerator()
 
 LLVMCodeGenerator::~LLVMCodeGenerator() {
 	delete _module;
-	// TODO: i'm sure this leaks all over the place...
 }
 
 bool LLVMCodeGenerator::build_ir(ASTNode* ast) {
