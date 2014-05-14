@@ -883,8 +883,10 @@ ASTReturn* Parser::_parse_return() {
 
 	_consume(1); // consume 'return'
 
-	// TODO: void returns
-	
+	if (expected_type == C3Type::VoidType()) {
+		return new ASTReturn(nullptr);
+	}
+
 	ASTExpression* exp = _parse_expression();
 
 	if (!exp) {

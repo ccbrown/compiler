@@ -189,10 +189,10 @@ struct ASTFunctionCall : ASTExpression {
 
 struct ASTCondition : ASTNode {
 	ASTExpression* condition;
-	ASTNode* truePath;
-	ASTNode* falsePath;
+	ASTNode* true_path;
+	ASTNode* false_path;
 
-	ASTCondition(ASTExpression* condition, ASTNode* truePath, ASTNode* falsePath) : condition(condition), truePath(truePath), falsePath(falsePath) {}
+	ASTCondition(ASTExpression* condition, ASTNode* true_path, ASTNode* false_path) : condition(condition), true_path(true_path), false_path(false_path) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTCondition();

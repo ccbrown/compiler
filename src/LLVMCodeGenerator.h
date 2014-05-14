@@ -43,11 +43,27 @@ class LLVMCodeGenerator : public ASTNodeVisitor {
 		llvm::Value* _lvalue(ASTExpression* exp);
 		llvm::Value* _rvalue(ASTExpression* exp, C3TypePtr type = nullptr);
 		llvm::Type* _llvm_type(C3TypePtr type);
+
+		void _build_basic_block(llvm::BasicBlock* block, ASTNode* node, llvm::BasicBlock* next);
 	
 		llvm::LLVMContext& _context;
 		llvm::Module* _module;
 		llvm::IRBuilder<> _builder;
-		llvm::Function* _current_function;
+
+		struct FunctionContext {
+			FunctionContext() = default;
+			FunctionContext(C3FunctionPtr c3_function, llvm::Function* llvm_function, llvm::AllocaInst* return_alloca, llvm::BasicBlock* return_block)
+				: c3_function(c3_function), llvm_function(llvm_function), return_alloca(return_alloca), return_block(return_block) {}
+			
+			C3FunctionPtr c3_function = nullptr;
+			llvm::Function* llvm_function = nullptr;
+			llvm::AllocaInst* return_alloca = nullptr;
+			llvm::BasicBlock* return_block = nullptr;
+		};
+		
+		FunctionContext _current_function_context;
+		bool _is_current_block_terminated = false;
+
 		std::unordered_map<std::string, llvm::Value*> _named_values;
 		std::unordered_map<std::string, llvm::Type*> _named_types;
 };

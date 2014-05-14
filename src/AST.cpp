@@ -170,7 +170,9 @@ ASTBinaryOp::~ASTBinaryOp() {
 
 void ASTReturn::print(int indentation) {
 	printf("%*sreturn\n", indentation * 2, "");
-	value->print(indentation + 1);
+	if (value) {
+		value->print(indentation + 1);
+	}
 }
 
 const void* ASTReturn::accept(ASTNodeVisitor* visitor) {
@@ -226,9 +228,9 @@ void ASTCondition::print(int indentation) {
 	printf("%*scondition:\n", indentation * 2, "");
 	condition->print(indentation + 1);
 	printf("%*strue:\n", (indentation + 1) * 2, "");
-	truePath->print(indentation + 2);
+	true_path->print(indentation + 2);
 	printf("%*sfalse:\n", (indentation + 1) * 2, "");
-	falsePath->print(indentation + 2);
+	false_path->print(indentation + 2);
 }
 
 const void* ASTCondition::accept(ASTNodeVisitor* visitor) {
@@ -237,8 +239,8 @@ const void* ASTCondition::accept(ASTNodeVisitor* visitor) {
 
 ASTCondition::~ASTCondition() {
 	delete condition;
-	delete truePath;
-	delete falsePath;
+	delete true_path;
+	delete false_path;
 }
 
 void ASTWhileLoop::print(int indentation) {

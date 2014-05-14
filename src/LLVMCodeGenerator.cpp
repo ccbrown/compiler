@@ -11,7 +11,6 @@ LLVMCodeGenerator::LLVMCodeGenerator()
 	: _context(llvm::getGlobalContext())
 	, _module(new llvm::Module("top", _context))
 	, _builder(llvm::getGlobalContext())
-	, _current_function(nullptr)
 {
 }
 
@@ -20,15 +19,7 @@ LLVMCodeGenerator::~LLVMCodeGenerator() {
 }
 
 bool LLVMCodeGenerator::build_ir(ASTNode* ast) {
-	llvm::FunctionType* funcType = llvm::FunctionType::get(_builder.getVoidTy(), false);
-	llvm::Function* mainFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, "main", _module);
-	llvm::BasicBlock* entry = llvm::BasicBlock::Create(_context, "entry", mainFunc);
-	_builder.SetInsertPoint(entry);
-
-	_current_function = mainFunc;
 	ast->accept(this);
-
-	_builder.CreateRetVoid();
 
 	_module->dump();
 
@@ -91,7 +82,6 @@ const void* LLVMCodeGenerator::visit(ASTExpression* node) {
 }
 
 const void* LLVMCodeGenerator::visit(ASTSequence* node) {
-	// TODO: wrap in a block?
 	for (ASTNode* n : node->sequence) {
 		n->accept(this);
 	}
@@ -142,25 +132,25 @@ const void* LLVMCodeGenerator::visit(ASTFunctionProto* node) {
 }
 
 const void* LLVMCodeGenerator::visit(ASTFunctionDef* node) {
-	llvm::Function* f = (llvm::Function*)node->proto->accept(this);
+	auto function = (llvm::Function*)node->proto->accept(this);
 	
 	// set names
 	size_t i = 0;
-	for (llvm::Function::arg_iterator ai = f->arg_begin(); ai != f->arg_end(); ++ai) {
+	for (llvm::Function::arg_iterator ai = function->arg_begin(); ai != function->arg_end(); ++ai) {
 		ai->setName(node->proto->arg_names[i]);
 		++i;
 	}
 
 	// create the block
-	llvm::BasicBlock* entry = llvm::BasicBlock::Create(_context, "entry", f);
+	llvm::BasicBlock* entry_block = llvm::BasicBlock::Create(_context, "entry", function);
 	llvm::IRBuilderBase::InsertPoint ip = _builder.saveIP();
-	_builder.SetInsertPoint(entry);
+	_builder.SetInsertPoint(entry_block);
 
 	// load arguments
 	// we copy them to allow them to be lvalues
 	// TODO: make sure llvm can optimize the unnecessary copies out?
 	i = 0;
-	for (llvm::Function::arg_iterator ai = f->arg_begin(); ai != f->arg_end(); ++ai) {
+	for (llvm::Function::arg_iterator ai = function->arg_begin(); ai != function->arg_end(); ++ai) {
 		llvm::AllocaInst* alloca = _builder.CreateAlloca(ai->getType(), 0, node->arg_prefix + node->proto->arg_names[i]);
 		_named_values[node->arg_prefix + node->proto->arg_names[i]] = alloca;
 		_builder.CreateStore(ai, alloca);
@@ -168,10 +158,28 @@ const void* LLVMCodeGenerator::visit(ASTFunctionDef* node) {
 	}
 
 	// build the body
-	auto prev_function = _current_function;
-	_current_function = f;
+
+	llvm::AllocaInst* return_alloca = nullptr;
+	if (node->proto->func->return_type() != C3Type::VoidType()) {
+		return_alloca = _builder.CreateAlloca(_llvm_type(node->proto->func->return_type()), nullptr, "ret");
+	}
+
+	llvm::BasicBlock* return_block = llvm::BasicBlock::Create(_context, "return", function);
+
+	FunctionContext context(node->proto->func, function, return_alloca, return_block);
+	auto prev_function_context = _current_function_context;
+	_current_function_context = context;
+	
 	node->body->accept(this);
-	_current_function = prev_function;
+
+	_current_function_context = prev_function_context;
+
+	_builder.SetInsertPoint(return_block);
+	if (return_alloca) {
+		_builder.CreateRet(_builder.CreateLoad(return_alloca));
+	} else {
+		_builder.CreateRetVoid();
+	}
 
 	// end the block
 	_builder.restoreIP(ip);
@@ -264,11 +272,15 @@ const void* LLVMCodeGenerator::visit(ASTBinaryOp* node) {
 }
 
 const void* LLVMCodeGenerator::visit(ASTReturn* node) {
-	if (!node->value) {
-		_builder.CreateRetVoid();
-	} else {
-		_builder.CreateRet(_rvalue(node->value));
+	assert(_current_function_context.c3_function);
+	
+	if (node->value) {
+		_builder.CreateStore(_rvalue(node->value, _current_function_context.c3_function->return_type()), _current_function_context.return_alloca);
 	}
+
+	_builder.CreateBr(_current_function_context.return_block);
+	_is_current_block_terminated = true;
+
 	return nullptr;
 }
 
@@ -330,51 +342,45 @@ const void* LLVMCodeGenerator::visit(ASTFunctionCall* node) {
 }
 
 const void* LLVMCodeGenerator::visit(ASTCondition* node) {
-	assert(_current_function);
+	assert(_current_function_context.llvm_function);
 	
-	llvm::BasicBlock* returnBlock = llvm::BasicBlock::Create(_context, "post", _current_function);
+	llvm::BasicBlock* post_block = llvm::BasicBlock::Create(_context, "post", _current_function_context.llvm_function);
 
 	// create the true block
-	llvm::BasicBlock* trueBlock = llvm::BasicBlock::Create(_context, "true", _current_function);
-	llvm::IRBuilderBase::InsertPoint ip = _builder.saveIP();
-	_builder.SetInsertPoint(trueBlock);
-	node->truePath->accept(this);
-	_builder.CreateBr(returnBlock);
-	_builder.restoreIP(ip);
+	llvm::BasicBlock* true_block = llvm::BasicBlock::Create(_context, "true", _current_function_context.llvm_function);
+	_build_basic_block(true_block, node->true_path, post_block);
 
 	// create the false block
-	llvm::BasicBlock* falseBlock = llvm::BasicBlock::Create(_context, "false", _current_function);
-	ip = _builder.saveIP();
-	_builder.SetInsertPoint(falseBlock);
-	node->falsePath->accept(this);
-	_builder.CreateBr(returnBlock);
-	_builder.restoreIP(ip);
+	llvm::BasicBlock* false_block = llvm::BasicBlock::Create(_context, "false", _current_function_context.llvm_function);
+	_build_basic_block(false_block, node->false_path, post_block);
 
-	_builder.CreateCondBr(_rvalue(node->condition), trueBlock, falseBlock);
-	_builder.SetInsertPoint(returnBlock);
+	_builder.CreateCondBr(_rvalue(node->condition), true_block, false_block);
+	_builder.SetInsertPoint(post_block);
+	_is_current_block_terminated = false;
 
 	return nullptr;
 }
 
 const void* LLVMCodeGenerator::visit(ASTWhileLoop* node) {
-	assert(_current_function);
+	assert(_current_function_context.llvm_function);
 	
-	llvm::BasicBlock* whileBlock = llvm::BasicBlock::Create(_context, "while", _current_function);
-	llvm::BasicBlock* breakBlock = llvm::BasicBlock::Create(_context, "break", _current_function);
+	if (_is_current_block_terminated) {
+		return nullptr;
+	}
 
-	_builder.CreateBr(whileBlock);
-	_builder.SetInsertPoint(whileBlock);
+	llvm::BasicBlock* while_block = llvm::BasicBlock::Create(_context, "while", _current_function_context.llvm_function);
+	llvm::BasicBlock* break_block = llvm::BasicBlock::Create(_context, "break", _current_function_context.llvm_function);
+
+	_builder.CreateBr(while_block);
 
 	// create the loop block
-	llvm::BasicBlock* bodyBlock = llvm::BasicBlock::Create(_context, "body", _current_function);
-	llvm::IRBuilderBase::InsertPoint ip = _builder.saveIP();
-	_builder.SetInsertPoint(bodyBlock);
-	node->body->accept(this);
-	_builder.CreateBr(whileBlock);
-	_builder.restoreIP(ip);
+	llvm::BasicBlock* body_block = llvm::BasicBlock::Create(_context, "body", _current_function_context.llvm_function);
+	_build_basic_block(body_block, node->body, while_block);
 
-	_builder.CreateCondBr(_rvalue(node->condition), bodyBlock, breakBlock);
-	_builder.SetInsertPoint(breakBlock);
+	_builder.SetInsertPoint(while_block);
+	_builder.CreateCondBr(_rvalue(node->condition), body_block, break_block);
+	_builder.SetInsertPoint(break_block);
+	_is_current_block_terminated = false;
 
 	return nullptr;
 }
@@ -445,3 +451,19 @@ llvm::Type* LLVMCodeGenerator::_llvm_type(C3TypePtr type) {
 	assert(false);
 	return llvm::Type::getVoidTy(_context);
 }
+
+void LLVMCodeGenerator::_build_basic_block(llvm::BasicBlock* block, ASTNode* node, llvm::BasicBlock* next) {
+	auto ip = _builder.saveIP();
+	_builder.SetInsertPoint(block);
+	auto was_block_terminated = _is_current_block_terminated;
+	_is_current_block_terminated = false;
+
+	node->accept(this);
+	if (!_is_current_block_terminated) {
+		_builder.CreateBr(next);
+	}
+
+	_builder.restoreIP(ip);
+	_is_current_block_terminated = was_block_terminated;
+}
+
