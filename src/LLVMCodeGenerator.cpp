@@ -363,10 +363,6 @@ const void* LLVMCodeGenerator::visit(ASTCondition* node) {
 
 const void* LLVMCodeGenerator::visit(ASTWhileLoop* node) {
 	assert(_current_function_context.llvm_function);
-	
-	if (_is_current_block_terminated) {
-		return nullptr;
-	}
 
 	llvm::BasicBlock* while_block = llvm::BasicBlock::Create(_context, "while", _current_function_context.llvm_function);
 	llvm::BasicBlock* break_block = llvm::BasicBlock::Create(_context, "break", _current_function_context.llvm_function);
