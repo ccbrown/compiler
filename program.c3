@@ -1,5 +1,7 @@
 import system;
 
+int64 write(int64 fd, void* buf, int64 len) { return 0; }
+
 void main() {
 	struct thing {
 		int64 a;
