@@ -50,6 +50,7 @@ class Parser {
 			ptt_char_constant,
 			ptt_keyword,
 			ptt_keyword_asm,
+			ptt_keyword_const,
 			ptt_keyword_extern,
 			ptt_keyword_return,
 			ptt_keyword_import,

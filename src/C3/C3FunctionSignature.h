@@ -1,10 +1,9 @@
 #pragma once
 
+#include "C3TypePtr.h"
+
 #include <vector>
 #include <string>
-
-class C3Type;
-typedef std::shared_ptr<C3Type> C3TypePtr;
 
 class C3FunctionSignature {
 	public:

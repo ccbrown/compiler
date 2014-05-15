@@ -43,7 +43,7 @@ struct ASTSequence : ASTNode {
 struct ASTVariableRef : ASTExpression {
 	C3VariablePtr var;
 
-	ASTVariableRef(C3VariablePtr var) : ASTExpression(var->type(), true), var(var) {}
+	ASTVariableRef(C3VariablePtr var) : ASTExpression(var->type(), !var->type()->is_constant()), var(var) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTVariableRef() {}

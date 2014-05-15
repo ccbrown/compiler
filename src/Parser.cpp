@@ -8,13 +8,17 @@ Parser::Parser() {
 
 	global.types["void"]   = C3Type::VoidType();
 	global.types["bool"]   = C3Type::BoolType();
-	global.types["char"]   = C3Type::CharType();
+	global.types["char"]   = C3Type::ModifiedType(C3Type::Int8Type(), C3TypeModifierUnsigned);
+	global.types["int32"]  = C3Type::Int32Type();
+	global.types["uint32"]  = C3Type::ModifiedType(C3Type::Int32Type(), C3TypeModifierUnsigned);
 	global.types["int64"]  = C3Type::Int64Type();
+	global.types["uint64"]  = C3Type::ModifiedType(C3Type::Int64Type(), C3TypeModifierUnsigned);
 	global.types["double"] = C3Type::DoubleType();
 
 	_scopes.push_back(global);
 	
 	_keywords.insert("asm");
+	_keywords.insert("const");
 	_keywords.insert("extern");
 	_keywords.insert("return");
 	_keywords.insert("import");
@@ -129,6 +133,8 @@ bool Parser::_peek(ParserTokenType type) {
 			return tok->type() == TokenTypeIdentifier && _keywords.count(tok->value()) > 0;
 		case ptt_keyword_asm:
 			return _peek(ptt_keyword) && tok->value() == "asm";
+		case ptt_keyword_const:
+			return _peek(ptt_keyword) && tok->value() == "const";
 		case ptt_keyword_extern:
 			return _peek(ptt_keyword) && tok->value() == "extern";
 		case ptt_keyword_return:
@@ -261,6 +267,13 @@ std::string Parser::_try_parse_full_name() {
 C3TypePtr Parser::_try_parse_type() {
 	auto start = _cur_tok;
 
+	bool is_constant = false;
+	
+	if (_peek(ptt_keyword_const)) {
+		is_constant = true;
+		_consume(1);
+	}
+
 	auto name = _try_parse_full_name();
 
 	if (name.empty()) { return nullptr; }
@@ -287,6 +300,10 @@ C3TypePtr Parser::_try_parse_type() {
 				break;
 			}
 		}
+	}
+	
+	if (is_constant) {
+		type = C3Type::ModifiedType(type, C3TypeModifierConstant);
 	}
 	
 	while (_peek(ptt_asterisk)) {
@@ -358,7 +375,8 @@ ASTExpression* Parser::_try_implicit_conversion(ASTExpression* expression, C3Typ
 	
 	if (true
 		&& expression->type->type() == C3TypeTypePointer && type->type() == C3TypeTypePointer
-		&& expression->type->points_to()->type() != C3TypeTypePointer && type->points_to() == C3Type::VoidType()
+		&& expression->type->points_to()->type() != C3TypeTypePointer && type->points_to()->type() == C3TypeTypeVoid
+		&& (!expression->type->points_to()->is_constant() || type->points_to()->is_constant())
 	) {
 		return new ASTStaticCast(expression, type);
 	}
@@ -573,7 +591,7 @@ ASTFunctionCall* Parser::_parse_function_call(ASTExpression* func) {
 		auto converted = _try_implicit_conversion(arg, arg_types[i]);
 		if (!converted) {
 			std::string msg = "invalid type for argument (expected '";
-			msg += arg_types[i]->name() + "' but got '" + arg->type->name() + "'";
+			msg += arg_types[i]->name() + "' but got '" + arg->type->name() + "')";
 			_errors.push_back(ParseError(msg, arg_tok));
 			// try to recover...
 		}
@@ -705,7 +723,9 @@ ASTExpression* Parser::_parse_binop_rhs(ASTExpression* lhs) {
 	C3TypePtr result_type = lhs->type;
 	bool compatible = false;
 
-	if (tok->value() == "==" || tok->value() == "!=" || tok->value() == "<" || tok->value() == "<=" || tok->value() == ">" || tok->value() == ">=") {
+	if (tok->value() == "=" && lhs->type->is_constant()) {
+		compatible = false;
+	} else if (tok->value() == "==" || tok->value() == "!=" || tok->value() == "<" || tok->value() == "<=" || tok->value() == ">" || tok->value() == ">=") {
 		compatible = ((lhs->type->is_floating_point() && rhs->type->is_floating_point()) || (lhs->type->is_integer() && rhs->type->is_integer()));
 		result_type = C3Type::BoolType();
 	} else if (*(lhs->type) == *(rhs->type)) {
@@ -952,7 +972,7 @@ ASTReturn* Parser::_parse_return() {
 
 	_consume(1); // consume 'return'
 
-	if (expected_type == C3Type::VoidType()) {
+	if (expected_type->type() == C3TypeTypeVoid) {
 		return new ASTReturn(nullptr);
 	}
 
@@ -998,7 +1018,7 @@ ASTExpression* Parser::_parse_primary() {
 	} else if (_peek(ptt_string_literal)) {
 		// string literal
 		TokenPtr tok = _consume_token();
-		return new ASTConstantArray(tok->value().c_str(), tok->value().size(), C3Type::CharType());
+		return new ASTConstantArray(tok->value().c_str(), tok->value().size(), C3Type::ModifiedType(C3Type::Int8Type(), C3TypeModifierUnsigned | C3TypeModifierConstant));
 	} else if (_peek(ptt_open_paren)) {
 		// parenthesized expression
 		_consume(1); // (

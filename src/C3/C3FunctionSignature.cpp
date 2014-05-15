@@ -32,7 +32,7 @@ const std::string& C3FunctionSignature::string() const {
 }
 
 bool C3FunctionSignature::operator==(C3FunctionSignature other) const {
-	if (return_type() != other.return_type() || arg_types().size() != other.arg_types().size()) {
+	if (*return_type() != *other.return_type() || arg_types().size() != other.arg_types().size()) {
 		return false;
 	}
 	for (size_t i = 0; i < arg_types().size(); ++i) {

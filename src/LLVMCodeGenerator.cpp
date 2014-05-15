@@ -160,7 +160,7 @@ const void* LLVMCodeGenerator::visit(ASTFunctionDef* node) {
 	// build the body
 
 	llvm::AllocaInst* return_alloca = nullptr;
-	if (node->proto->func->return_type() != C3Type::VoidType()) {
+	if (node->proto->func->return_type()->type() != C3TypeTypeVoid) {
 		return_alloca = _builder.CreateAlloca(_llvm_type(node->proto->func->return_type()), nullptr, "ret");
 	}
 
@@ -204,7 +204,7 @@ const void* LLVMCodeGenerator::visit(ASTConstantArray* node) {
 
 	assert(node->type->points_to());
 	switch (node->type->points_to()->type()) {
-		case C3TypeTypeBuiltInInt8:
+		case C3TypeTypeInt8:
 			v = llvm::ConstantDataArray::get(_context, llvm::ArrayRef<uint8_t>((uint8_t*)node->data, node->size));
 			break;
 		default:
@@ -412,17 +412,17 @@ llvm::Type* LLVMCodeGenerator::_llvm_type(C3TypePtr type) {
 	switch (type->type()) {
 		case C3TypeTypePointer:
 			// llvm doesn't do void pointers
-			return type->points_to() == C3Type::VoidType() ? llvm::Type::getInt8Ty(_context)->getPointerTo() : _llvm_type(type->points_to())->getPointerTo();
-		case C3TypeTypeBuiltInVoid:
+			return type->points_to()->type() == C3TypeTypeVoid ? llvm::Type::getInt8Ty(_context)->getPointerTo() : _llvm_type(type->points_to())->getPointerTo();
+		case C3TypeTypeVoid:
 			return llvm::Type::getVoidTy(_context);
-		case C3TypeTypeBuiltInBool:
-		case C3TypeTypeBuiltInInt8:
+		case C3TypeTypeBool:
+		case C3TypeTypeInt8:
 			return llvm::Type::getInt8Ty(_context);
-		case C3TypeTypeBuiltInInt32:
+		case C3TypeTypeInt32:
 			return llvm::Type::getInt32Ty(_context);
-		case C3TypeTypeBuiltInInt64:
+		case C3TypeTypeInt64:
 			return llvm::Type::getInt64Ty(_context);
-		case C3TypeTypeBuiltInDouble:
+		case C3TypeTypeDouble:
 			return llvm::Type::getDoubleTy(_context);
 		case C3TypeTypeFunction:
 			assert(false); // TODO: ???
