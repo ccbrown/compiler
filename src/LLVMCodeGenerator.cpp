@@ -341,6 +341,11 @@ const void* LLVMCodeGenerator::visit(ASTFunctionCall* node) {
 	return _builder.CreateCall(_rvalue(node->func), args);
 }
 
+const void* LLVMCodeGenerator::visit(ASTStaticCast* node) {
+	// TODO: non-pointer casts
+	return _builder.CreatePointerCast((llvm::Value*)node->original->accept(this), _llvm_type(node->type));
+}
+
 const void* LLVMCodeGenerator::visit(ASTCondition* node) {
 	assert(_current_function_context.llvm_function);
 	
@@ -406,7 +411,8 @@ llvm::Value* LLVMCodeGenerator::_rvalue(ASTExpression* exp, C3TypePtr type) {
 llvm::Type* LLVMCodeGenerator::_llvm_type(C3TypePtr type) {
 	switch (type->type()) {
 		case C3TypeTypePointer:
-			return _llvm_type(type->points_to())->getPointerTo();
+			// llvm doesn't do void pointers
+			return type->points_to() == C3Type::VoidType() ? llvm::Type::getInt8Ty(_context)->getPointerTo() : _llvm_type(type->points_to())->getPointerTo();
 		case C3TypeTypeBuiltInVoid:
 			return llvm::Type::getVoidTy(_context);
 		case C3TypeTypeBuiltInBool:

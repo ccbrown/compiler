@@ -50,6 +50,7 @@ class Parser {
 			ptt_char_constant,
 			ptt_keyword,
 			ptt_keyword_asm,
+			ptt_keyword_extern,
 			ptt_keyword_return,
 			ptt_keyword_import,
 			ptt_keyword_if,
@@ -118,9 +119,14 @@ class Parser {
 		C3VariablePtr _try_parse_variable();
 		C3FunctionPtr _try_parse_function();
 
-		ASTVariableDec* _parse_variable_dec(C3TypePtr type);
-		ASTNode* _parse_function_proto_or_def(C3TypePtr type, bool* was_just_proto);
-		ASTFunctionProto* _parse_function_proto(C3TypePtr type, bool* args_are_named = nullptr);
+		/**
+		* Takes ownership of `from` only if successful.
+		*/
+		ASTExpression* _try_implicit_conversion(ASTExpression* from, C3TypePtr to);
+
+		ASTVariableDec* _parse_variable_dec();
+		ASTNode* _parse_function_proto_or_def(bool* was_just_proto);
+		ASTFunctionProto* _parse_function_proto(bool* args_are_named = nullptr);
 		ASTFunctionCall* _parse_function_call(ASTExpression* func);
 		ASTNode* _parse_struct_dec_or_def();
 
@@ -129,6 +135,8 @@ class Parser {
 
 		ASTExpression* _parse_inline_asm_operand(std::string* constraint);
 		ASTInlineAsm* _parse_inline_asm();
+		
+		ASTNode* _parse_external_declaration();
 
 		ASTReturn* _parse_return();
 

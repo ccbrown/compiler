@@ -20,7 +20,13 @@ class C3Function {
 
 		C3TypePtr return_type() { return _signature.return_type(); }
 		const std::string& name() { return _name; }
+
+		/**
+		* The global name is the mangled function name used in the compiled binary.
+		*/
 		const std::string& global_name() { return _global_name; }
+		void set_global_name(const std::string& name) { _global_name = name; }
+
 		const std::vector<C3TypePtr>& arg_types() { return _signature.arg_types(); }
 		const C3FunctionSignature& signature() { return _signature; }
 		C3TypePtr type() { return _type; }

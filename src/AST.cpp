@@ -224,6 +224,19 @@ ASTFunctionCall::~ASTFunctionCall() {
 	}
 }
 
+void ASTStaticCast::print(int indentation) {
+	printf("%*sstatic cast to %s\n", indentation * 2, "", type->name().c_str());
+	original->print(indentation + 1);
+}
+
+const void* ASTStaticCast::accept(ASTNodeVisitor* visitor) {
+	return visitor->visit(this);
+}
+
+ASTStaticCast::~ASTStaticCast() {
+	delete original;
+}
+
 void ASTCondition::print(int indentation) {
 	printf("%*scondition:\n", indentation * 2, "");
 	condition->print(indentation + 1);

@@ -36,6 +36,7 @@ class LLVMCodeGenerator : public ASTNodeVisitor {
 		virtual const void* visit(ASTReturn* node);
 		virtual const void* visit(ASTInlineAsm* node);
 		virtual const void* visit(ASTFunctionCall* node);
+		virtual const void* visit(ASTStaticCast* node);
 		virtual const void* visit(ASTCondition* node);
 		virtual const void* visit(ASTWhileLoop* node);
 			

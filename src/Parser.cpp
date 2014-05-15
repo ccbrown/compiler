@@ -15,6 +15,7 @@ Parser::Parser() {
 	_scopes.push_back(global);
 	
 	_keywords.insert("asm");
+	_keywords.insert("extern");
 	_keywords.insert("return");
 	_keywords.insert("import");
 	_keywords.insert("if");
@@ -128,6 +129,8 @@ bool Parser::_peek(ParserTokenType type) {
 			return tok->type() == TokenTypeIdentifier && _keywords.count(tok->value()) > 0;
 		case ptt_keyword_asm:
 			return _peek(ptt_keyword) && tok->value() == "asm";
+		case ptt_keyword_extern:
+			return _peek(ptt_keyword) && tok->value() == "extern";
 		case ptt_keyword_return:
 			return _peek(ptt_keyword) && tok->value() == "return";
 		case ptt_keyword_import:
@@ -348,7 +351,29 @@ C3FunctionPtr Parser::_try_parse_function() {
 	return nullptr;
 }
 
-ASTVariableDec* Parser::_parse_variable_dec(C3TypePtr type) {
+ASTExpression* Parser::_try_implicit_conversion(ASTExpression* expression, C3TypePtr type) {
+	if (*(expression->type) == *type) {
+		return expression;
+	}
+	
+	if (true
+		&& expression->type->type() == C3TypeTypePointer && type->type() == C3TypeTypePointer
+		&& expression->type->points_to()->type() != C3TypeTypePointer && type->points_to() == C3Type::VoidType()
+	) {
+		return new ASTStaticCast(expression, type);
+	}
+	
+	return nullptr;
+}
+
+ASTVariableDec* Parser::_parse_variable_dec() {
+	auto type = _try_parse_type();
+	
+	if (!type) {
+		_errors.push_back(ParseError("expected type", _token()));
+		return nullptr;
+	}
+
 	if (!_peek(ptt_new_name)) {
 		_errors.push_back(ParseError("expected new variable name", _token()));
 		return nullptr;
@@ -375,11 +400,11 @@ ASTVariableDec* Parser::_parse_variable_dec(C3TypePtr type) {
 	return new ASTVariableDec(var);
 }
 
-ASTNode* Parser::_parse_function_proto_or_def(C3TypePtr type, bool* was_just_proto) {
+ASTNode* Parser::_parse_function_proto_or_def(bool* was_just_proto) {
 	// function prototype	
 	bool args_are_named = false;
 	TokenPtr protoTok = _token();
-	ASTFunctionProto* proto = _parse_function_proto(type, &args_are_named);
+	ASTFunctionProto* proto = _parse_function_proto(&args_are_named);
 	if (proto && _peek(ptt_open_brace)) {
 		// function body
 		ASTNode* node = nullptr;
@@ -428,7 +453,14 @@ ASTNode* Parser::_parse_function_proto_or_def(C3TypePtr type, bool* was_just_pro
 	return proto;
 }
 
-ASTFunctionProto* Parser::_parse_function_proto(C3TypePtr type, bool* args_are_named) {
+ASTFunctionProto* Parser::_parse_function_proto(bool* args_are_named) {
+	auto return_type = _try_parse_type();
+	
+	if (!return_type) {
+		_errors.push_back(ParseError("expected type", _token()));
+		return nullptr;
+	}
+	
 	if (!_peek(ptt_undefd_func_name)) {
 		_errors.push_back(ParseError("expected undefined function name", _token()));
 		return nullptr;
@@ -485,7 +517,7 @@ ASTFunctionProto* Parser::_parse_function_proto(C3TypePtr type, bool* args_are_n
 	}
 
 	Scope& scope = _scopes.back();
-	C3FunctionPtr func = C3FunctionPtr(new C3Function(type, tok->value(), scope.global_prefix() + tok->value(), std::move(args), tok));
+	C3FunctionPtr func = C3FunctionPtr(new C3Function(return_type, tok->value(), scope.global_prefix() + tok->value(), std::move(args), tok));
 
 	auto fit = scope.functions.find(tok->value());
 	if (fit != scope.functions.end()) {
@@ -534,13 +566,14 @@ ASTFunctionCall* Parser::_parse_function_call(ASTExpression* func) {
 			}
 			return nullptr;
 		}
-		if (*(arg->type) != *(arg_types[i])) {
+		auto converted = _try_implicit_conversion(arg, arg_types[i]);
+		if (!converted) {
 			std::string msg = "invalid type for argument (expected '";
 			msg += arg_types[i]->name() + "' but got '" + arg->type->name() + "'";
 			_errors.push_back(ParseError(msg, arg_tok));
-			// recover...
+			// try to recover...
 		}
-		args.push_back(arg);
+		args.push_back(converted ? converted : arg);
 	}
 
 	if (!_peek(ptt_close_paren)) {
@@ -868,6 +901,38 @@ ASTInlineAsm* Parser::_parse_inline_asm() {
 	return new ASTInlineAsm(assembly, outputs, inputs, constraints);
 }
 
+ASTNode* Parser::_parse_external_declaration() {
+	if (!_peek(ptt_keyword_extern)) {
+		_errors.push_back(ParseError("expected 'extern'", _token()));
+		return nullptr;
+	}
+	
+	_consume(1); // extern
+	
+	auto proto = _parse_function_proto();
+	if (!proto) {
+		return nullptr;
+	}
+	
+	if (!_peek(ptt_colon)) {
+		_errors.push_back(ParseError("expected colon", _token()));
+		// try to continue
+	} else {
+		_consume(1);
+	}
+
+	if (!_peek(ptt_string_literal)) {
+		_errors.push_back(ParseError("expected external symbol name (a string literal)", _token()));
+		delete proto;
+		return nullptr;
+	}
+	
+	auto symbol = _consume_token();
+	proto->func->set_global_name(symbol->value());
+	
+	return proto;
+}
+
 ASTReturn* Parser::_parse_return() {
 	if (!_peek(ptt_keyword_return)) {
 		_errors.push_back(ParseError("expected 'return'", _token()));
@@ -1098,17 +1163,6 @@ ASTNode* Parser::_parse_statement() {
 		}
 		_consume(1); // }
 		expect_semicolon = false;
-	} else if (C3TypePtr type = _try_parse_type()) {
-		// proto or declaration
-		if (_peek({ptt_identifier, ptt_open_paren})) {
-			// function proto or def
-			bool just_proto = true;
-			node = _parse_function_proto_or_def(type, &just_proto);
-			expect_semicolon = just_proto;
-		} else {
-			// variable declaration
-			node = _parse_variable_dec(type);
-		}
 	} else if (_peek(ptt_keyword_if)) {
 		// if block
 		_consume(1); // if
@@ -1178,6 +1232,9 @@ ASTNode* Parser::_parse_statement() {
 	} else if (_peek(ptt_keyword_asm)) {
 		// inline assembly
 		node = _parse_inline_asm();
+	} else if (_peek(ptt_keyword_extern)) {
+		// external declaration
+		node = _parse_external_declaration();
 	} else if (_peek(ptt_keyword_return)) {
 		// return statement
 		node = _parse_return();
@@ -1186,8 +1243,23 @@ ASTNode* Parser::_parse_statement() {
 		node = _parse_struct_dec_or_def();
 		expect_semicolon = false;
 	} else {
-		// expression
-		node = _parse_expression();
+		auto tok = _cur_tok;
+		C3TypePtr type = _try_parse_type();
+		if (type && _peek({ptt_identifier, ptt_open_paren})) {
+			_cur_tok = tok;
+			// function proto or def
+			bool just_proto = true;
+			node = _parse_function_proto_or_def(&just_proto);
+			expect_semicolon = just_proto;
+		} else if (type) {
+			_cur_tok = tok;
+			// variable declaration
+			node = _parse_variable_dec();
+		} else {
+			_cur_tok = tok;
+			// expression
+			node = _parse_expression();
+		}
 	}
 
 	if (node && expect_semicolon && !_peek(ptt_semicolon)) {
