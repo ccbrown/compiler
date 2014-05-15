@@ -35,7 +35,7 @@ class C3Type {
 		C3TypeType type() const { return _type; }
 		size_t size() const;
 
-		C3TypePtr points_to() const;
+		C3TypePtr pointed_to_type() const;
 		const C3FunctionSignature& signature() const;
 
 		bool is_integer() const;
@@ -77,7 +77,7 @@ class C3Type {
 		bool _is_defined = false;
 
 		C3TypePtr _pointer;
-		C3TypePtr _points_to;
+		C3TypePtr _pointed_to_type;
 		
 		C3FunctionSignature _function_sig;		
 

@@ -133,7 +133,7 @@ const void* ASTInteger::accept(ASTNodeVisitor* visitor) {
 }
 
 void ASTConstantArray::print(int indentation) {
-	printf("%*sarray: %s[%lu]\n", indentation * 2, "", type->points_to()->name().c_str(), size / type->points_to()->size());
+	printf("%*sarray: %s[%lu]\n", indentation * 2, "", type->pointed_to_type()->name().c_str(), size / type->pointed_to_type()->size());
 }
 
 const void* ASTConstantArray::accept(ASTNodeVisitor* visitor) {
@@ -225,7 +225,7 @@ ASTFunctionCall::~ASTFunctionCall() {
 }
 
 void ASTStaticCast::print(int indentation) {
-	printf("%*sstatic cast to %s\n", indentation * 2, "", type->name().c_str());
+	printf("%*sstatic cast: %s\n", indentation * 2, "", type->name().c_str());
 	original->print(indentation + 1);
 }
 

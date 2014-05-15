@@ -42,7 +42,7 @@ class LLVMCodeGenerator : public ASTNodeVisitor {
 			
 	private:
 		llvm::Value* _lvalue(ASTExpression* exp);
-		llvm::Value* _rvalue(ASTExpression* exp, C3TypePtr type = nullptr);
+		llvm::Value* _rvalue(ASTExpression* exp);
 		llvm::Type* _llvm_type(C3TypePtr type);
 
 		void _build_basic_block(llvm::BasicBlock* block, ASTNode* node, llvm::BasicBlock* next);

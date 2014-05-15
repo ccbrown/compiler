@@ -25,6 +25,7 @@ Parser::Parser() {
 	_keywords.insert("if");
 	_keywords.insert("else");
 	_keywords.insert("while");
+	_keywords.insert("static_cast");
 	_keywords.insert("struct");
 	_keywords.insert("namespace");
 
@@ -105,6 +106,10 @@ TokenPtr Parser::_consume_token() {
 bool Parser::_peek(ParserTokenType type) {
 	TokenPtr tok = _token();
 	switch (type) {
+		case ptt_open_angle:
+			return tok->type() == TokenTypePunctuator && tok->value() == "<";
+		case ptt_close_angle:
+			return tok->type() == TokenTypePunctuator && tok->value() == ">";
 		case ptt_semicolon:
 			return tok->type() == TokenTypePunctuator && tok->value() == ";";
 		case ptt_colon:
@@ -147,6 +152,8 @@ bool Parser::_peek(ParserTokenType type) {
 			return _peek(ptt_keyword) && tok->value() == "else";
 		case ptt_keyword_while:
 			return _peek(ptt_keyword) && tok->value() == "while";
+		case ptt_keyword_static_cast:
+			return _peek(ptt_keyword) && tok->value() == "static_cast";
 		case ptt_keyword_struct:
 			return _peek(ptt_keyword) && tok->value() == "struct";
 		case ptt_keyword_namespace:
@@ -375,9 +382,13 @@ ASTExpression* Parser::_try_implicit_conversion(ASTExpression* expression, C3Typ
 	
 	if (true
 		&& expression->type->type() == C3TypeTypePointer && type->type() == C3TypeTypePointer
-		&& expression->type->points_to()->type() != C3TypeTypePointer && type->points_to()->type() == C3TypeTypeVoid
-		&& (!expression->type->points_to()->is_constant() || type->points_to()->is_constant())
+		&& expression->type->pointed_to_type()->type() != C3TypeTypePointer && type->pointed_to_type()->type() == C3TypeTypeVoid
+		&& (!expression->type->pointed_to_type()->is_constant() || type->pointed_to_type()->is_constant())
 	) {
+		return new ASTStaticCast(expression, type);
+	}
+	
+	if (expression->type->is_integer() && type->is_integer()) {
 		return new ASTStaticCast(expression, type);
 	}
 	
@@ -408,11 +419,19 @@ ASTVariableDec* Parser::_parse_variable_dec() {
 	if (_peek(ptt_assignment)) {
 		// initial value
 		_consume(1); // consume '='
-		ASTExpression* init = _parse_expression();
+		auto init = _parse_expression();
 		if (!init) {
 			return nullptr;
 		}
-		return new ASTVariableDec(var, init);
+		auto converted = _try_implicit_conversion(init, type);
+		if (!converted) {
+			std::string msg("unable to initialize variable of type ''");
+			msg += type->name() + "' with expression of type '" + init->type->name() + "'";
+			_errors.push_back(ParseError(msg.c_str(), _token()));
+			delete init;
+			return nullptr;
+		}
+		return new ASTVariableDec(var, converted);
 	}
 
 	return new ASTVariableDec(var);
@@ -686,7 +705,7 @@ ASTExpression* Parser::_parse_binop_rhs(ASTExpression* lhs) {
 				delete lhs;
 				return nullptr;
 			}
-			lhs = new ASTUnaryOp("*", lhs, lhs->type->points_to(), true);
+			lhs = new ASTUnaryOp("*", lhs, lhs->type->pointed_to_type(), true);
 		}
 		auto type = lhs->type;
 		if (type->type() != C3TypeTypeStruct) {
@@ -723,8 +742,15 @@ ASTExpression* Parser::_parse_binop_rhs(ASTExpression* lhs) {
 	C3TypePtr result_type = lhs->type;
 	bool compatible = false;
 
-	if (tok->value() == "=" && lhs->type->is_constant()) {
-		compatible = false;
+	if (tok->value() == "=") {
+		if (lhs->type->is_constant()) {
+			compatible = false;
+		} else if (auto converted = _try_implicit_conversion(rhs, lhs->type)) {
+			compatible = true;
+			rhs = converted;
+		} else {
+			compatible = false;
+		}
 	} else if (tok->value() == "==" || tok->value() == "!=" || tok->value() == "<" || tok->value() == "<=" || tok->value() == ">" || tok->value() == ">=") {
 		compatible = ((lhs->type->is_floating_point() && rhs->type->is_floating_point()) || (lhs->type->is_integer() && rhs->type->is_integer()));
 		result_type = C3Type::BoolType();
@@ -734,9 +760,10 @@ ASTExpression* Parser::_parse_binop_rhs(ASTExpression* lhs) {
 	} else if (lhs->type->is_integer() && rhs->type->is_integer()) {
 		// integers are compatible because they get promoted as necessary
 		compatible = true;
-		if (tok->value() != "=") {
-			result_type = C3Type::Int64Type();
-		}
+		result_type = C3Type::Int64Type();
+	} else if (lhs->type->type() == C3TypeTypePointer && lhs->type->pointed_to_type()->type() != C3TypeTypeVoid && rhs->type->is_integer() && (tok->value() == "+" || tok->value() == "-")) {
+		// pointer arithmetic
+		compatible = true;
 	}
 
 	if (!compatible) {
@@ -997,6 +1024,9 @@ ASTExpression* Parser::_parse_primary() {
 		return new ASTVariableRef(var);
 	} else if (auto func = _try_parse_function()) {
 		return new ASTFunctionRef(func);
+	} else if (_peek(ptt_keyword_static_cast)) {
+		// static cast
+		return _parse_static_cast();
 	} else if (_peek(ptt_number)) {
 		// number
 		TokenPtr tok = _consume_token();
@@ -1039,12 +1069,77 @@ ASTExpression* Parser::_parse_primary() {
 	return nullptr;
 }
 
+ASTStaticCast* Parser::_parse_static_cast() {
+	if (!_peek(ptt_keyword_static_cast)) {
+		_errors.push_back(ParseError("expected static_cast", _token()));
+		return nullptr;
+	}
+	
+	auto static_cast_tok = _consume_token();
+	
+	if (!_peek(ptt_open_angle)) {
+		_errors.push_back(ParseError("expected opening angle bracket for type", _token()));
+		return nullptr;
+	}
+	_consume(1); // <
+
+	auto type = _try_parse_type();
+	if (!type) {
+		_errors.push_back(ParseError("expected type", _token()));
+		return nullptr;
+	}
+
+	if (!_peek(ptt_close_angle)) {
+		_errors.push_back(ParseError("expected closing angle bracket for type", _token()));
+		return nullptr;
+	}
+	_consume(1); // >
+
+	if (!_peek(ptt_open_paren)) {
+		_errors.push_back(ParseError("expected opening parenthesis", _token()));
+		return nullptr;
+	}
+	_consume(1); // (
+
+	auto expression = _parse_expression();
+	if (!expression) {
+		return nullptr;
+	}
+
+	if (!_peek(ptt_close_paren)) {
+		_errors.push_back(ParseError("expected closing parenthesis", _token()));
+		delete expression;
+		return nullptr;
+	}
+	_consume(1); // )
+		
+	if (type->type() == C3TypeTypePointer && expression->type->type() == C3TypeTypePointer && type->pointed_to_type()->is_constant() && !expression->type->pointed_to_type()->is_constant()) {
+		_errors.push_back(ParseError("cannot cast away constness", static_cast_tok));
+		delete expression;
+		return nullptr;
+	}
+
+	// TODO: enforce more of the limitations of static_cast
+
+	return new ASTStaticCast(expression, type);
+}
+		
 ASTExpression* Parser::_parse_expression(Precedence minPrecedence) {
+	ASTExpression* exp = nullptr;
+
 	if (_peek(ptt_unary_op)) {
 		// unary operation
-		TokenPtr tok = _consume_token();
-		TokenPtr rhs_tok = _token();
-		ASTExpression* rhs = _parse_expression();
+
+		auto precedence = _unary_ops[_token()->value()];
+		
+		if (precedence.rank < minPrecedence.rank || (precedence.rank == minPrecedence.rank && !minPrecedence.rtol)) {
+			return nullptr;
+		}
+
+		auto tok = _consume_token();
+		auto rhs_tok = _token();
+
+		auto rhs = _parse_expression(precedence);
 		if (!rhs) {
 			return nullptr;
 		}
@@ -1053,22 +1148,24 @@ ASTExpression* Parser::_parse_expression(Precedence minPrecedence) {
 			if (!rhs->is_lvalue) {
 				_errors.push_back(ParseError("operand to '&' operator must be an lvalue", rhs_tok));
 				delete rhs;
-				return nullptr;
+			} else {
+				exp = new ASTUnaryOp(tok->value(), rhs, C3Type::PointerType(rhs->type));
 			}
-			return new ASTUnaryOp(tok->value(), rhs, C3Type::PointerType(rhs->type));
 		} else if (tok->value() == "*") {
 			if (rhs->type->type() != C3TypeTypePointer) {
 				_errors.push_back(ParseError("operand to '*' operator must be a pointer type", rhs_tok));
 				delete rhs;
-				return nullptr;
+			} else {
+				exp = new ASTUnaryOp(tok->value(), rhs, rhs->type->pointed_to_type(), true);
 			}
-			return new ASTUnaryOp(tok->value(), rhs, rhs->type->points_to(), true);
+		} else {
+			exp = new ASTUnaryOp(tok->value(), rhs, rhs->type);
 		}
-		
-		return new ASTUnaryOp(tok->value(), rhs, rhs->type);
 	}
 
-	ASTExpression* exp = _parse_primary();
+	if (!exp) {
+		exp = _parse_primary();
+	}
 
 	if (!exp) {
 		return nullptr;

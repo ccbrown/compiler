@@ -41,9 +41,9 @@ void main() {
 	if (a == 25) {
 		system::write(1, "pass\n", 5);
 	}
-	
+
 	char c = '0' + sum(&t);
-	
+
 	system::write(1, &c, 1);
 	system::write(1, "\n", 1);
 	
@@ -63,6 +63,12 @@ void main() {
 		system::write(1, "*1*\n", 4);
 		system::write(1, "*2*\n", 4);
 	}
+	
+	char* alloc = static_cast<char*>(system::calloc(1, 3));
+	*alloc = 'x';
+	*(alloc - -1) = '\n';
+	system::write(1, alloc, 2);
+	system::free(alloc);
 	
 	int64 i = 0;
 	system::write(1, "loop\n", 5);

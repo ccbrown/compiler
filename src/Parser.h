@@ -25,6 +25,8 @@ class Parser {
 
 	private:
 		enum ParserTokenType {
+			ptt_open_angle,
+			ptt_close_angle,
 			ptt_semicolon,
 			ptt_colon,
 			ptt_open_brace,
@@ -57,6 +59,7 @@ class Parser {
 			ptt_keyword_if,
 			ptt_keyword_else,
 			ptt_keyword_while,
+			ptt_keyword_static_cast,
 			ptt_keyword_struct,
 			ptt_keyword_namespace,
 		};
@@ -119,7 +122,7 @@ class Parser {
 		C3TypePtr _try_parse_type();
 		C3VariablePtr _try_parse_variable();
 		C3FunctionPtr _try_parse_function();
-
+		
 		/**
 		* Takes ownership of `from` only if successful.
 		*/
@@ -133,6 +136,7 @@ class Parser {
 
 		ASTExpression* _parse_expression(Precedence minPrecedence = { 0, false });
 		ASTExpression* _parse_primary();
+		ASTStaticCast* _parse_static_cast();
 
 		ASTExpression* _parse_inline_asm_operand(std::string* constraint);
 		ASTInlineAsm* _parse_inline_asm();

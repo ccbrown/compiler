@@ -99,7 +99,7 @@ const void* LLVMCodeGenerator::visit(ASTVariableDec* node) {
 	_named_values[node->var->global_name()] = alloca;
 
 	if (node->init) {
-		_builder.CreateStore(_rvalue(node->init, node->var->type()), alloca);
+		_builder.CreateStore(_rvalue(node->init), alloca);
 	}
 
 	return nullptr;
@@ -202,8 +202,8 @@ const void* LLVMCodeGenerator::visit(ASTInteger* node) {
 const void* LLVMCodeGenerator::visit(ASTConstantArray* node) {
 	llvm::Constant* v = nullptr;
 
-	assert(node->type->points_to());
-	switch (node->type->points_to()->type()) {
+	assert(node->type->pointed_to_type());
+	switch (node->type->pointed_to_type()->type()) {
 		case C3TypeTypeInt8:
 			v = llvm::ConstantDataArray::get(_context, llvm::ArrayRef<uint8_t>((uint8_t*)node->data, node->size));
 			break;
@@ -222,14 +222,15 @@ const void* LLVMCodeGenerator::visit(ASTConstantArray* node) {
 const void* LLVMCodeGenerator::visit(ASTUnaryOp* node) {
 	if (node->op == "&") {
 		assert(node->right->is_lvalue && !node->is_lvalue);
-		// we don't really have to do anything
-		// the right side was an lvalue (a reference) and the result of this is that same reference, marked as an rvalue
-		return node->right->accept(this);
+		return _lvalue(node->right);
 	} else if (node->op == "*") {
 		assert(node->is_lvalue);
 		return _rvalue(node->right);
+	} else if (node->op == "-") {
+		auto value = _rvalue(node->right);
+		return value->getType()->isFPOrFPVectorTy() ? _builder.CreateFNeg(value) : _builder.CreateNeg(value);
 	}
-	// TODO: implement other ops
+
 	assert(false);
 	return nullptr;
 }
@@ -238,18 +239,22 @@ const void* LLVMCodeGenerator::visit(ASTBinaryOp* node) {
 	if (node->op == "=") {
 		// assign
 		llvm::Value* left = _lvalue(node->left);
-		_builder.CreateStore(_rvalue(node->right, node->left->type), left);
+		_builder.CreateStore(_rvalue(node->right), left);
 		return left;
 	} else {
-		auto left       = _rvalue(node->left, node->type);
-		auto right      = _rvalue(node->right, node->type);
+		auto left       = _rvalue(node->left);
+		auto right      = _rvalue(node->right);
 		bool signed_op  = node->left->type->is_signed() || node->right->type->is_signed();
 		if (node->op == "*") {
 			return left->getType()->isFPOrFPVectorTy() ? _builder.CreateFMul(left, right) : _builder.CreateMul(left, right);
 		} else if (node->op == "/") {
 			return left->getType()->isFPOrFPVectorTy() ? _builder.CreateFDiv(left, right) : (signed_op ? _builder.CreateSDiv(left, right) : _builder.CreateUDiv(left, right));
+		} else if (node->op == "+" && left->getType()->isPointerTy()) {
+			return _builder.CreateGEP(left, right);
 		} else if (node->op == "+") {
 			return left->getType()->isFPOrFPVectorTy() ? _builder.CreateFAdd(left, right) : _builder.CreateAdd(left, right);
+		} else if (node->op == "-" && left->getType()->isPointerTy()) {
+			return _builder.CreateGEP(left, _builder.CreateNeg(right));
 		} else if (node->op == "-") {
 			return left->getType()->isFPOrFPVectorTy() ? _builder.CreateFSub(left, right) : _builder.CreateSub(left, right);
 		} else if (node->op == "==") {
@@ -275,7 +280,7 @@ const void* LLVMCodeGenerator::visit(ASTReturn* node) {
 	assert(_current_function_context.c3_function);
 	
 	if (node->value) {
-		_builder.CreateStore(_rvalue(node->value, _current_function_context.c3_function->return_type()), _current_function_context.return_alloca);
+		_builder.CreateStore(_rvalue(node->value), _current_function_context.return_alloca);
 	}
 
 	_builder.CreateBr(_current_function_context.return_block);
@@ -342,8 +347,10 @@ const void* LLVMCodeGenerator::visit(ASTFunctionCall* node) {
 }
 
 const void* LLVMCodeGenerator::visit(ASTStaticCast* node) {
-	// TODO: non-pointer casts
-	return _builder.CreatePointerCast((llvm::Value*)node->original->accept(this), _llvm_type(node->type));
+	if (node->type->type() == C3TypeTypePointer) {
+		return _builder.CreatePointerCast(_rvalue(node->original), _llvm_type(node->type));
+	}
+	return _builder.CreateIntCast(_rvalue(node->original), _llvm_type(node->type), node->original->type->is_signed());
 }
 
 const void* LLVMCodeGenerator::visit(ASTCondition* node) {
@@ -391,19 +398,10 @@ llvm::Value* LLVMCodeGenerator::_lvalue(ASTExpression* exp) {
 	return (llvm::Value*)exp->accept(this);
 }
 
-llvm::Value* LLVMCodeGenerator::_rvalue(ASTExpression* exp, C3TypePtr type) {
+llvm::Value* LLVMCodeGenerator::_rvalue(ASTExpression* exp) {
 	llvm::Value* v = (llvm::Value*)exp->accept(this);
 	if (exp->is_lvalue) {
 		v = _builder.CreateLoad(v);
-	}
-	if (type && *type != *exp->type) {
-		if (exp->type->is_integer()) {
-			// integer promotion / conversion
-			assert(type->is_integer());
-			v = _builder.CreateIntCast(v, _llvm_type(type), exp->type->is_signed());
-		} else {
-			assert(false);
-		}
 	}
 	return v;
 }
@@ -412,7 +410,7 @@ llvm::Type* LLVMCodeGenerator::_llvm_type(C3TypePtr type) {
 	switch (type->type()) {
 		case C3TypeTypePointer:
 			// llvm doesn't do void pointers
-			return type->points_to()->type() == C3TypeTypeVoid ? llvm::Type::getInt8Ty(_context)->getPointerTo() : _llvm_type(type->points_to())->getPointerTo();
+			return type->pointed_to_type()->type() == C3TypeTypeVoid ? llvm::Type::getInt8Ty(_context)->getPointerTo() : _llvm_type(type->pointed_to_type())->getPointerTo();
 		case C3TypeTypeVoid:
 			return llvm::Type::getVoidTy(_context);
 		case C3TypeTypeBool:

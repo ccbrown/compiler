@@ -8,7 +8,7 @@ C3Type::C3Type(const std::string& name, const std::string& global_name, C3TypeTy
 C3Type::C3Type(const std::string& name, C3TypeType type) : _name(name), _global_name(name), _type(type) {
 }
 
-C3Type::C3Type(const std::string& name, C3TypeType type, C3TypePtr points_to) : _name(name), _global_name(name), _type(type), _points_to(points_to) {
+C3Type::C3Type(const std::string& name, C3TypeType type, C3TypePtr pointed_to_type) : _name(name), _global_name(name), _type(type), _pointed_to_type(pointed_to_type) {
 	assert(type == C3TypeTypePointer);
 }
 
@@ -39,8 +39,8 @@ size_t C3Type::size() const {
 	return 0;
 }
 
-C3TypePtr C3Type::points_to() const {
-	return _points_to;
+C3TypePtr C3Type::pointed_to_type() const {
+	return _pointed_to_type;
 }
 
 const C3FunctionSignature& C3Type::signature() const {
@@ -73,7 +73,12 @@ void C3Type::define(const C3StructDefinition& definition) {
 }
 
 bool C3Type::operator==(const C3Type& right) const {
-	return (type() == right.type() && (type() != C3TypeTypePointer || *(points_to()) == *(right.points_to())));
+	return (true 
+		&& type() == right.type() 
+		&& is_constant() == right.is_constant() 
+		&& is_signed() == right.is_signed() 
+		&& (type() != C3TypeTypePointer || *(pointed_to_type()) == *(right.pointed_to_type()))
+	);
 }
 
 bool C3Type::operator!=(const C3Type& right) const {
