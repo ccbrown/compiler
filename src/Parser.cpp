@@ -4,7 +4,7 @@
 #include <sstream>
 
 Parser::Parser() {
-	Scope global("");
+	Scope global("^");
 
 	global.types["void"]   = C3Type::VoidType();
 	global.types["bool"]   = C3Type::BoolType();
@@ -517,7 +517,11 @@ ASTFunctionProto* Parser::_parse_function_proto(bool* args_are_named) {
 	}
 
 	Scope& scope = _scopes.back();
-	C3FunctionPtr func = C3FunctionPtr(new C3Function(return_type, tok->value(), scope.global_prefix() + tok->value(), std::move(args), tok));
+	auto global_name = scope.global_prefix() + tok->value();
+	if (global_name == _scopes.front().prefix + "main") {
+		global_name = "main";
+	}
+	C3FunctionPtr func = C3FunctionPtr(new C3Function(return_type, tok->value(), global_name, std::move(args), tok));
 
 	auto fit = scope.functions.find(tok->value());
 	if (fit != scope.functions.end()) {
