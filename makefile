@@ -2,29 +2,29 @@ SHELL = /bin/bash
 
 EXENAME = c3
 
-CFLAGS = --std=c++11 --stdlib=libc++ -I. `llvm-config --cppflags`
+CXXFLAGS = --std=c++11 --stdlib=libc++ `llvm-config --cppflags`
 LDFLAGS = -v -lc++ `llvm-config --ldflags --libs core support target`
 
 SRCDIR = src
 OBJDIR = obj
 
-SRCS := $(shell find $(SRCDIR) -name '*.c') $(shell find $(SRCDIR) -name '*.cpp')
-HDRS := $(shell find $(SRCDIR) -name '*.h') $(shell find $(SRCDIR) -name '*.hpp')
-
-OBJS := $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SRCS)))
+SRCS := $(shell find $(SRCDIR) -name '*.cpp')
+OBJS := $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SRCS))
+DEPS := $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.d,$(SRCS))
 
 all: $(EXENAME)
+
+ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
+-include $(DEPS)
+endif
 
 $(OBJDIR): $(OBJDIR)/C3
 	
 $(OBJDIR)/C3:
 	mkdir -p $(OBJDIR)/C3
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.c
-	$(CXX) $(CFLAGS) -c $< -o $@
-
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
-	$(CXX) $(CFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -MD -MT '$@' -MF '$(patsubst $(OBJDIR)/%.o,$(OBJDIR)/%.d,$@)'
 
 $(EXENAME): $(OBJDIR) $(OBJS)
 	mkdir -p $(dir $@)

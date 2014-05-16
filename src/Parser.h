@@ -35,13 +35,16 @@ class Parser {
 			ptt_close_paren,
 			ptt_comma,
 			ptt_asterisk,
+			ptt_ampersand,
 			ptt_assignment,
 			ptt_equality,
 			ptt_inequality,
 			ptt_namespace_delimiter,
-			ptt_new_name,
-			ptt_namespace_name,
-			ptt_new_or_namespace_name,
+			ptt_type_name,
+			ptt_new_namespace_name,
+			ptt_new_variable_name,
+			ptt_new_type_name,
+			ptt_local_type_name,
 			ptt_undefd_func_name,
 			ptt_number,
 			ptt_end_token,
@@ -62,6 +65,7 @@ class Parser {
 			ptt_keyword_static_cast,
 			ptt_keyword_struct,
 			ptt_keyword_namespace,
+			ptt_keyword_nullptr,
 		};
 		
 		struct Scope {
@@ -119,8 +123,14 @@ class Parser {
 		void _pop_scope();
 
 		std::string _try_parse_full_name();
+
+		C3TypePtr _resolveType(const std::string& name);
 		C3TypePtr _try_parse_type();
+
+		C3VariablePtr _resolveVariable(const std::string& name);
 		C3VariablePtr _try_parse_variable();
+
+		C3FunctionPtr _resolveFunction(const std::string& name);
 		C3FunctionPtr _try_parse_function();
 		
 		/**

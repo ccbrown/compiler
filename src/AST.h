@@ -23,9 +23,9 @@ struct ASTNop : ASTNode {
 
 struct ASTExpression : ASTNode {
 	C3TypePtr type;
-	bool is_lvalue;
+	bool is_constant = false;
 
-	ASTExpression(C3TypePtr type, bool is_lvalue = false) : type(type), is_lvalue(is_lvalue) {}
+	ASTExpression(C3TypePtr type, bool is_constant = false) : type(type), is_constant(is_constant) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTExpression() {}
@@ -43,7 +43,7 @@ struct ASTSequence : ASTNode {
 struct ASTVariableRef : ASTExpression {
 	C3VariablePtr var;
 
-	ASTVariableRef(C3VariablePtr var) : ASTExpression(var->type(), !var->type()->is_constant()), var(var) {}
+	ASTVariableRef(C3VariablePtr var) : ASTExpression(C3Type::ReferenceType(var->type())), var(var) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTVariableRef() {}
@@ -62,7 +62,7 @@ struct ASTVariableDec : ASTNode {
 struct ASTFunctionRef : ASTExpression {
 	C3FunctionPtr func;
 
-	ASTFunctionRef(C3FunctionPtr func) : ASTExpression(func->type(), false), func(func) {}
+	ASTFunctionRef(C3FunctionPtr func) : ASTExpression(func->type()), func(func) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTFunctionRef() {}
@@ -102,7 +102,7 @@ struct ASTStructMemberRef : ASTExpression {
 struct ASTFloatingPoint : ASTExpression {
 	double value;
 
-	ASTFloatingPoint(double value, C3TypePtr type) : ASTExpression(type), value(value) {}
+	ASTFloatingPoint(double value, C3TypePtr type) : ASTExpression(type, true), value(value) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTFloatingPoint() {}
@@ -111,7 +111,7 @@ struct ASTFloatingPoint : ASTExpression {
 struct ASTInteger : ASTExpression {
 	uint64_t value;
 
-	ASTInteger(uint64_t value, C3TypePtr type) : ASTExpression(type), value(value) {}
+	ASTInteger(uint64_t value, C3TypePtr type) : ASTExpression(type, true), value(value) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTInteger() {}
@@ -121,7 +121,7 @@ struct ASTConstantArray : ASTExpression {
 	void* data;
 	size_t size;
 	
-	ASTConstantArray(const void* data, size_t size, C3TypePtr type) : ASTExpression(C3Type::PointerType(type)) {
+	ASTConstantArray(const void* data, size_t size, C3TypePtr type) : ASTExpression(C3Type::PointerType(type), true) {
 		this->data = malloc(size);
 		memcpy(this->data, data, size);
 		this->size = size;
@@ -138,7 +138,7 @@ struct ASTUnaryOp : ASTExpression {
 	ASTExpression* right;
 	C3TypePtr type;
 
-	ASTUnaryOp(const std::string& op, ASTExpression* right, C3TypePtr type, bool is_lvalue = false) : ASTExpression(type, is_lvalue), op(op), right(right) {}
+	ASTUnaryOp(const std::string& op, ASTExpression* right, C3TypePtr type) : ASTExpression(type), op(op), right(right) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTUnaryOp();
@@ -190,7 +190,7 @@ struct ASTFunctionCall : ASTExpression {
 struct ASTStaticCast : ASTExpression {
 	ASTExpression* original;
 
-	ASTStaticCast(ASTExpression* original, C3TypePtr type) : ASTExpression(type), original(original) {}
+	ASTStaticCast(ASTExpression* original, C3TypePtr type) : ASTExpression(type, original->is_constant), original(original) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
 	virtual ~ASTStaticCast();
@@ -217,6 +217,13 @@ struct ASTWhileLoop : ASTNode {
 	virtual ~ASTWhileLoop();
 };
 
+struct ASTNullPointer : ASTExpression {
+	ASTNullPointer(C3TypePtr type) : ASTExpression(type, true) {}
+	virtual void print(int indentation = 0);
+	virtual const void* accept(ASTNodeVisitor* visitor);
+	virtual ~ASTNullPointer() = default;
+};
+
 class ASTNodeVisitor {
 	public:
 		virtual const void* visit(ASTNode* node) { return nullptr; }
@@ -240,5 +247,6 @@ class ASTNodeVisitor {
 		virtual const void* visit(ASTStaticCast* node) { return nullptr; }
 		virtual const void* visit(ASTCondition* node) { return nullptr; }
 		virtual const void* visit(ASTWhileLoop* node) { return nullptr; }
+		virtual const void* visit(ASTNullPointer* node) { return nullptr; }
 		virtual ~ASTNodeVisitor() {}
 };

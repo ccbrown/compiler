@@ -8,8 +8,8 @@ C3Type::C3Type(const std::string& name, const std::string& global_name, C3TypeTy
 C3Type::C3Type(const std::string& name, C3TypeType type) : _name(name), _global_name(name), _type(type) {
 }
 
-C3Type::C3Type(const std::string& name, C3TypeType type, C3TypePtr pointed_to_type) : _name(name), _global_name(name), _type(type), _pointed_to_type(pointed_to_type) {
-	assert(type == C3TypeTypePointer);
+C3Type::C3Type(const std::string& name, C3TypeType type, C3TypePtr pointed_to_or_referenced_type) : _name(name), _global_name(name), _type(type), _pointed_to_or_referenced_type(pointed_to_or_referenced_type) {
+	assert(type == C3TypeTypePointer || type == C3TypeTypeReference);
 }
 
 C3Type::C3Type(const C3FunctionSignature& signature) : _name(signature.string()), _global_name(_name), _type(C3TypeTypeFunction), _function_sig(signature) {
@@ -18,6 +18,8 @@ C3Type::C3Type(const C3FunctionSignature& signature) : _name(signature.string())
 size_t C3Type::size() const {
 	switch (_type) {
 		case C3TypeTypePointer:
+		case C3TypeTypeReference:
+		case C3TypeTypeNullPointer:
 		case C3TypeTypeFunction:
 			return sizeof(void*);
 		case C3TypeTypeStruct:
@@ -40,7 +42,11 @@ size_t C3Type::size() const {
 }
 
 C3TypePtr C3Type::pointed_to_type() const {
-	return _pointed_to_type;
+	return type() == C3TypeTypePointer ? _pointed_to_or_referenced_type : nullptr;
+}
+
+C3TypePtr C3Type::referenced_type() const {
+	return type() == C3TypeTypeReference ? _pointed_to_or_referenced_type : nullptr;
 }
 
 const C3FunctionSignature& C3Type::signature() const {
@@ -92,8 +98,20 @@ C3TypePtr C3Type::PointerType(C3TypePtr type) {
 	return type->_pointer;
 }
 
+C3TypePtr C3Type::ReferenceType(C3TypePtr type) {
+	if (!type->_reference) {
+		type->_reference = C3TypePtr(new C3Type(type->name() + "&", C3TypeTypeReference, type));
+	}
+	return type->_reference;
+}
+
 C3TypePtr C3Type::VoidType() {
 	static C3TypePtr ret = C3TypePtr(new C3Type("void", C3TypeTypeVoid));
+	return ret;
+}
+
+C3TypePtr C3Type::NullPointerType() {
+	static C3TypePtr ret = C3TypePtr(new C3Type("nullptr", C3TypeTypeNullPointer));
 	return ret;
 }
 
@@ -143,4 +161,8 @@ C3TypePtr C3Type::Int64Type() {
 C3TypePtr C3Type::DoubleType() {
 	static C3TypePtr ret = C3TypePtr(new C3Type("double", C3TypeTypeDouble));
 	return ret;
+}
+
+C3TypePtr C3Type::RemoveReference(C3TypePtr type) {
+	return type->type() == C3TypeTypeReference ? type->referenced_type() : type;
 }

@@ -5,9 +5,11 @@
 
 enum C3TypeType {
 	C3TypeTypePointer,
+	C3TypeTypeReference,
 	C3TypeTypeFunction,
 	C3TypeTypeStruct,
 	C3TypeTypeVoid,
+	C3TypeTypeNullPointer,
 	C3TypeTypeBool,
 	C3TypeTypeInt8,
 	C3TypeTypeInt32,
@@ -36,6 +38,8 @@ class C3Type {
 		size_t size() const;
 
 		C3TypePtr pointed_to_type() const;
+		C3TypePtr referenced_type() const;
+
 		const C3FunctionSignature& signature() const;
 
 		bool is_integer() const;
@@ -52,20 +56,24 @@ class C3Type {
 		bool operator!=(const C3Type& right) const;
 
 		static C3TypePtr PointerType(C3TypePtr type);
+		static C3TypePtr ReferenceType(C3TypePtr type);
 		static C3TypePtr FunctionType(const C3FunctionSignature& signature);
 		static C3TypePtr StructType(const std::string& name, const std::string& global_name, const C3StructDefinition& definition);
 		static C3TypePtr ModifiedType(C3TypePtr type, int modifiers);
 		static C3TypePtr VoidType();
+		static C3TypePtr NullPointerType();
 		static C3TypePtr BoolType();
 		static C3TypePtr Int8Type();
 		static C3TypePtr Int32Type();
 		static C3TypePtr Int64Type();
 		static C3TypePtr DoubleType();
 
+		static C3TypePtr RemoveReference(C3TypePtr type);
+
 	private:
 		C3Type(const std::string& name, const std::string& global_name, C3TypeType type);
 		C3Type(const std::string& name, C3TypeType type);
-		C3Type(const std::string& name, C3TypeType type, C3TypePtr pointsTo);
+		C3Type(const std::string& name, C3TypeType type, C3TypePtr pointed_to_or_referenced);
 		C3Type(const C3FunctionSignature& signature);
 
 		std::string _name;
@@ -77,7 +85,8 @@ class C3Type {
 		bool _is_defined = false;
 
 		C3TypePtr _pointer;
-		C3TypePtr _pointed_to_type;
+		C3TypePtr _reference;
+		C3TypePtr _pointed_to_or_referenced_type;
 		
 		C3FunctionSignature _function_sig;		
 

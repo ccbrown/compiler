@@ -39,10 +39,11 @@ class LLVMCodeGenerator : public ASTNodeVisitor {
 		virtual const void* visit(ASTStaticCast* node);
 		virtual const void* visit(ASTCondition* node);
 		virtual const void* visit(ASTWhileLoop* node);
+		virtual const void* visit(ASTNullPointer* node);
 			
 	private:
-		llvm::Value* _lvalue(ASTExpression* exp);
-		llvm::Value* _rvalue(ASTExpression* exp);
+		llvm::Value* _value(ASTExpression* exp);
+		llvm::Value* _dereferenced_value(ASTExpression* exp);
 		llvm::Type* _llvm_type(C3TypePtr type);
 
 		void _build_basic_block(llvm::BasicBlock* block, ASTNode* node, llvm::BasicBlock* next);

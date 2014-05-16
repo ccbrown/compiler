@@ -97,7 +97,7 @@ ASTFunctionDef::~ASTFunctionDef() {
 }
 
 ASTStructMemberRef::ASTStructMemberRef(ASTExpression* structure, size_t index) 
-	: ASTExpression(structure->type->struct_definition().member_vars()[index].type, structure->is_lvalue)
+	: ASTExpression(C3Type::ReferenceType(C3Type::RemoveReference(structure->type)->struct_definition().member_vars()[index].type))
 	, structure(structure)
 	, index(index)
 {	
@@ -270,4 +270,12 @@ const void* ASTWhileLoop::accept(ASTNodeVisitor* visitor) {
 ASTWhileLoop::~ASTWhileLoop() {
 	delete condition;
 	delete body;
+}
+
+void ASTNullPointer::print(int indentation) {
+	printf("%*snull pointer\n", indentation * 2, "");
+}
+
+const void* ASTNullPointer::accept(ASTNodeVisitor* visitor) {
+	return visitor->visit(this);
 }
