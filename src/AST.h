@@ -187,13 +187,13 @@ struct ASTFunctionCall : ASTExpression {
 	virtual ~ASTFunctionCall();
 };
 
-struct ASTStaticCast : ASTExpression {
+struct ASTCast : ASTExpression {
 	ASTExpression* original;
 
-	ASTStaticCast(ASTExpression* original, C3TypePtr type) : ASTExpression(type, original->is_constant), original(original) {}
+	ASTCast(ASTExpression* original, C3TypePtr type) : ASTExpression(type, original->is_constant), original(original) {}
 	virtual void print(int indentation = 0);
 	virtual const void* accept(ASTNodeVisitor* visitor);
-	virtual ~ASTStaticCast();
+	virtual ~ASTCast();
 };
 
 struct ASTCondition : ASTNode {
@@ -244,7 +244,7 @@ class ASTNodeVisitor {
 		virtual const void* visit(ASTReturn* node) { return nullptr; }
 		virtual const void* visit(ASTInlineAsm* node) { return nullptr; }
 		virtual const void* visit(ASTFunctionCall* node) { return nullptr; }
-		virtual const void* visit(ASTStaticCast* node) { return nullptr; }
+		virtual const void* visit(ASTCast* node) { return nullptr; }
 		virtual const void* visit(ASTCondition* node) { return nullptr; }
 		virtual const void* visit(ASTWhileLoop* node) { return nullptr; }
 		virtual const void* visit(ASTNullPointer* node) { return nullptr; }

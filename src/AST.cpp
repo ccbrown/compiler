@@ -224,16 +224,16 @@ ASTFunctionCall::~ASTFunctionCall() {
 	}
 }
 
-void ASTStaticCast::print(int indentation) {
+void ASTCast::print(int indentation) {
 	printf("%*sstatic cast: %s\n", indentation * 2, "", type->name().c_str());
 	original->print(indentation + 1);
 }
 
-const void* ASTStaticCast::accept(ASTNodeVisitor* visitor) {
+const void* ASTCast::accept(ASTNodeVisitor* visitor) {
 	return visitor->visit(this);
 }
 
-ASTStaticCast::~ASTStaticCast() {
+ASTCast::~ASTCast() {
 	delete original;
 }
 

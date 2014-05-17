@@ -15,6 +15,17 @@ C3Type::C3Type(const std::string& name, C3TypeType type, C3TypePtr pointed_to_or
 C3Type::C3Type(const C3FunctionSignature& signature) : _name(signature.string()), _global_name(_name), _type(C3TypeTypeFunction), _function_sig(signature) {
 }
 
+std::string C3Type::name() const {
+	std::string ret = "";
+	if (is_constant()) {
+		ret += "const ";
+	}
+	if (!is_signed()) {
+		ret += "unsigned ";
+	}
+	return ret + _name;
+}
+
 size_t C3Type::size() const {
 	switch (_type) {
 		case C3TypeTypePointer:
@@ -24,6 +35,7 @@ size_t C3Type::size() const {
 			return sizeof(void*);
 		case C3TypeTypeStruct:
 			return _is_defined ? _struct_def.size() : 0;
+		case C3TypeTypeAuto:
 		case C3TypeTypeVoid:
 			return 0;
 		case C3TypeTypeBool:
@@ -61,16 +73,24 @@ bool C3Type::is_floating_point() const {
 	return (_type == C3TypeTypeDouble);
 }
 
+bool C3Type::is_auto() const {
+	return (_type == C3TypeTypeAuto || (_pointed_to_or_referenced_type && _pointed_to_or_referenced_type->is_auto()));
+}
+
 bool C3Type::is_constant() const {
-	return _is_constant;
+	return (_modifiers & C3TypeModifierConstant);
 }
 
 bool C3Type::is_signed() const {
-	return _is_signed;
+	return !(_modifiers & C3TypeModifierUnsigned);
 }
 
 bool C3Type::is_defined() const {
 	return (_type != C3TypeTypeStruct || _is_defined);
+}
+
+void C3Type::set_modifiers(int modifiers) {
+	_modifiers = modifiers;
 }
 
 void C3Type::define(const C3StructDefinition& definition) {
@@ -105,6 +125,11 @@ C3TypePtr C3Type::ReferenceType(C3TypePtr type) {
 	return type->_reference;
 }
 
+C3TypePtr C3Type::AutoType() {
+	static C3TypePtr ret = C3TypePtr(new C3Type("auto", C3TypeTypeAuto));
+	return ret;
+}
+
 C3TypePtr C3Type::VoidType() {
 	static C3TypePtr ret = C3TypePtr(new C3Type("void", C3TypeTypeVoid));
 	return ret;
@@ -132,14 +157,7 @@ C3TypePtr C3Type::StructType(const std::string& name, const std::string& global_
 
 C3TypePtr C3Type::ModifiedType(C3TypePtr type, int modifiers) {
 	auto ret = C3TypePtr(new C3Type(*type));
-	if (ret->_is_signed && (modifiers & C3TypeModifierUnsigned)) {
-		ret->_is_signed = false;
-		ret->_name = std::string("unsigned ") + ret->_name;
-	}
-	if (!ret->_is_constant && (modifiers & C3TypeModifierConstant)) {
-		ret->_is_constant = true;
-		ret->_name = std::string("const ") + ret->_name;
-	}
+	ret->set_modifiers(modifiers);
 	return ret;
 }
 

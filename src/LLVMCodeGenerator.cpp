@@ -95,21 +95,17 @@ const void* LLVMCodeGenerator::visit(ASTVariableRef* node) {
 }
 
 const void* LLVMCodeGenerator::visit(ASTVariableDec* node) {
-	if (_current_function_context.llvm_function) {
-		// function variable
-		
+	if (node->var->is_static()) {
+		assert(node->init->is_constant);
+		auto global = new llvm::GlobalVariable(*_module, _llvm_type(node->var->type()), node->var->type()->is_constant(), llvm::GlobalValue::WeakAnyLinkage, static_cast<llvm::Constant*>(_value(node->init)), node->var->global_name().c_str());
+		_named_values[node->var->global_name()] = global;
+	} else {
 		auto alloca = _builder.CreateAlloca(_llvm_type(node->var->type()), 0, node->var->global_name().c_str());
 		_named_values[node->var->global_name()] = alloca;
 	
 		if (node->init) {
 			_builder.CreateStore(_dereferenced_value(node->init), alloca);
 		}
-	} else {
-		// global variable
-		
-		assert(node->init->is_constant);
-		auto global = new llvm::GlobalVariable(*_module, _llvm_type(node->var->type()), node->var->type()->is_constant(), llvm::GlobalValue::WeakAnyLinkage, static_cast<llvm::Constant*>(_value(node->init)), node->var->global_name().c_str());
-		_named_values[node->var->global_name()] = global;
 	}
 
 	return nullptr;
@@ -236,6 +232,8 @@ const void* LLVMCodeGenerator::visit(ASTUnaryOp* node) {
 	} else if (node->op == "*") {
 		assert(C3Type::RemoveReference(node->right->type)->pointed_to_type());
 		return _dereferenced_value(node->right);
+	} else if (node->op == "!") {
+		return _builder.CreateNot(_dereferenced_value(node->right));
 	} else if (node->op == "-") {
 		auto value = _dereferenced_value(node->right);
 		return value->getType()->isFPOrFPVectorTy() ? _builder.CreateFNeg(value) : _builder.CreateNeg(value);
@@ -259,6 +257,8 @@ const void* LLVMCodeGenerator::visit(ASTBinaryOp* node) {
 			return left->getType()->isFPOrFPVectorTy() ? _builder.CreateFMul(left, right) : _builder.CreateMul(left, right);
 		} else if (node->op == "/") {
 			return left->getType()->isFPOrFPVectorTy() ? _builder.CreateFDiv(left, right) : (signed_op ? _builder.CreateSDiv(left, right) : _builder.CreateUDiv(left, right));
+		} else if (node->op == "%") {
+			return left->getType()->isFPOrFPVectorTy() ? _builder.CreateFRem(left, right) : (signed_op ? _builder.CreateSRem(left, right) : _builder.CreateURem(left, right));
 		} else if (node->op == "+" && left->getType()->isPointerTy()) {
 			return _builder.CreateGEP(left, right);
 		} else if (node->op == "+") {
@@ -356,7 +356,7 @@ const void* LLVMCodeGenerator::visit(ASTFunctionCall* node) {
 	return _builder.CreateCall(_dereferenced_value(node->func), args);
 }
 
-const void* LLVMCodeGenerator::visit(ASTStaticCast* node) {
+const void* LLVMCodeGenerator::visit(ASTCast* node) {
 	if (node->original->is_constant) {
 		// constant expression
 		if (node->type->type() == C3TypeTypePointer) {
@@ -368,6 +368,11 @@ const void* LLVMCodeGenerator::visit(ASTStaticCast* node) {
 	if (node->type->type() == C3TypeTypePointer) {
 		return _builder.CreatePointerCast(_dereferenced_value(node->original), _llvm_type(node->type));
 	}
+
+	if (node->type->type() == C3TypeTypeBool && C3Type::RemoveReference(node->original->type)->type() == C3TypeTypePointer) {
+		return _builder.CreateIsNotNull(_dereferenced_value(node->original));
+	}
+
 	return _builder.CreateIntCast(_dereferenced_value(node->original), _llvm_type(node->type), node->original->type->is_signed());
 }
 
@@ -435,9 +440,12 @@ llvm::Type* LLVMCodeGenerator::_llvm_type(C3TypePtr type) {
 		case C3TypeTypeReference:
 			// llvm doesn't do void pointers
 			return type->pointed_to_type()->type() == C3TypeTypeVoid ? llvm::Type::getInt8Ty(_context)->getPointerTo() : _llvm_type(type->pointed_to_type())->getPointerTo();
+		case C3TypeTypeAuto:
+			assert(false);
 		case C3TypeTypeVoid:
 			return llvm::Type::getVoidTy(_context);
 		case C3TypeTypeBool:
+			return llvm::Type::getInt1Ty(_context);
 		case C3TypeTypeInt8:
 			return llvm::Type::getInt8Ty(_context);
 		case C3TypeTypeInt32:

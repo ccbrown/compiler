@@ -42,7 +42,7 @@ void main() {
 		system::write(1, "pass\n", 5);
 	}
 
-	char c = '0' + sum(&t);
+	uint8 c = '0' + sum(&t);
 
 	system::write(1, &c, 1);
 	system::write(1, "\n", 1);
@@ -64,7 +64,7 @@ void main() {
 		system::write(1, "*2*\n", 4);
 	}
 	
-	char* alloc = static_cast<char*>(system::calloc(1, 3));
+	uint8* alloc = static_cast<uint8*>(system::calloc(1, 3));
 	*alloc = 'x';
 	*(alloc - -1) = '\n';
 	system::write(1, alloc, 2);
@@ -73,7 +73,7 @@ void main() {
 	int64 i = 0;
 	system::write(1, "loop\n", 5);
 	while (i < 5) {
-		char x = '0' + i;
+		uint8 x = '0' + i;
 		system::write(1, &x, 1);
 		system::write(1, "\n", 1);
 		i = i + 1;

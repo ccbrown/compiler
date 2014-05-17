@@ -7,8 +7,10 @@ Parser::Parser() {
 	Scope global("^");
 
 	global.types["void"]   = C3Type::VoidType();
+	global.types["auto"]   = C3Type::AutoType();
 	global.types["bool"]   = C3Type::BoolType();
-	global.types["char"]   = C3Type::ModifiedType(C3Type::Int8Type(), C3TypeModifierUnsigned);
+	global.types["int8"]   = C3Type::Int8Type();
+	global.types["uint8"]  = C3Type::ModifiedType(C3Type::Int8Type(), C3TypeModifierUnsigned);
 	global.types["int32"]  = C3Type::Int32Type();
 	global.types["uint32"] = C3Type::ModifiedType(C3Type::Int32Type(), C3TypeModifierUnsigned);
 	global.types["int64"]  = C3Type::Int64Type();
@@ -29,6 +31,7 @@ Parser::Parser() {
 	_keywords.insert("if");
 	_keywords.insert("else");
 	_keywords.insert("while");
+	_keywords.insert("static");
 	_keywords.insert("static_cast");
 	_keywords.insert("struct");
 	_keywords.insert("namespace");
@@ -41,8 +44,10 @@ Parser::Parser() {
 	 _unary_ops["-"]  = { 100, true };
 	 _unary_ops["*"]  = { 100, true };
 	 _unary_ops["&"]  = { 100, true };
+	 _unary_ops["!"]  = { 100, true };
 	_binary_ops["*"]  = {  80, false };
 	_binary_ops["/"]  = {  80, false };
+	_binary_ops["%"]  = {  80, false };
 	_binary_ops["+"]  = {  60, false };
 	_binary_ops["-"]  = {  60, false };
 	_binary_ops["<"]  = {  50, false };
@@ -108,8 +113,14 @@ TokenPtr Parser::_consume_token() {
 	return ret;
 }
 
-bool Parser::_peek(ParserTokenType type) {
+bool Parser::_peek(ParserTokenType type, TokenIterator* next) {
+	if (next) {
+		*next = _cur_tok;
+		++*next;
+	}
+
 	TokenPtr tok = _token();
+
 	switch (type) {
 		case ptt_open_angle:
 			return tok->type() == TokenTypePunctuator && tok->value() == "<";
@@ -145,6 +156,8 @@ bool Parser::_peek(ParserTokenType type) {
 			return tok->type() == TokenTypeIdentifier && _keywords.count(tok->value()) > 0;
 		case ptt_keyword_asm:
 			return _peek(ptt_keyword) && tok->value() == "asm";
+		case ptt_keyword_auto:
+			return _peek(ptt_keyword) && tok->value() == "auto";
 		case ptt_keyword_const:
 			return _peek(ptt_keyword) && tok->value() == "const";
 		case ptt_keyword_extern:
@@ -159,6 +172,8 @@ bool Parser::_peek(ParserTokenType type) {
 			return _peek(ptt_keyword) && tok->value() == "else";
 		case ptt_keyword_while:
 			return _peek(ptt_keyword) && tok->value() == "while";
+		case ptt_keyword_static:
+			return _peek(ptt_keyword) && tok->value() == "static";
 		case ptt_keyword_static_cast:
 			return _peek(ptt_keyword) && tok->value() == "static_cast";
 		case ptt_keyword_struct:
@@ -221,6 +236,13 @@ bool Parser::_peek(ParserTokenType type) {
 			Scope& s = _scopes.back();
 			return s.types.count(s.local_prefix() + tok->value());
 		}
+		case ptt_type: {
+			auto tok = _cur_tok;
+			auto ret = (bool)_try_parse_type();
+			if (next) { *next = _cur_tok; }
+			_cur_tok = tok;
+			return ret;
+		}
 		case ptt_type_name: {
 			return (bool)_resolveType(tok->value());
 		}
@@ -231,12 +253,13 @@ bool Parser::_peek(ParserTokenType type) {
 
 bool Parser::_peek(std::initializer_list<ParserTokenType> types) {
 	TokenIterator prev_it = _cur_tok;
+	TokenIterator next = _cur_tok;
 	for (ParserTokenType type : types) {
-		if (!_peek(type)) {
+		if (!_peek(type, &next)) {
 			_cur_tok = prev_it;
 			return false;
 		}
-		_consume(1);
+		_cur_tok = next;
 	}
 	_cur_tok = prev_it;
 	return true;
@@ -422,12 +445,14 @@ C3FunctionPtr Parser::_try_parse_function() {
 	return nullptr;
 }
 
-ASTExpression* Parser::_try_implicit_conversion(ASTExpression* expression, C3TypePtr type) {
+ASTExpression* Parser::_implicit_conversion(ASTExpression* expression, C3TypePtr type) {
 	auto rr_exp_type = C3Type::RemoveReference(expression->type);
 	
 	if (*rr_exp_type == *type) {
 		return expression;
 	}
+	
+	// TODO: this should really be rewritten
 
 	if (expression->type->type() == C3TypeTypePointer && type->type() == C3TypeTypePointer && *C3Type::PointerType(C3Type::RemoveReference(expression->type->pointed_to_type())) == *type) {
 		return expression;
@@ -435,26 +460,75 @@ ASTExpression* Parser::_try_implicit_conversion(ASTExpression* expression, C3Typ
 
 	if (true
 		&& rr_exp_type->type() == C3TypeTypePointer && type->type() == C3TypeTypePointer
-		&& rr_exp_type->pointed_to_type()->type() != C3TypeTypePointer && type->pointed_to_type()->type() == C3TypeTypeVoid
+		&&  (   *C3Type::ModifiedType(rr_exp_type->pointed_to_type(), C3TypeModifierConstant) == *C3Type::ModifiedType(type->pointed_to_type(), C3TypeModifierConstant)
+			|| (rr_exp_type->pointed_to_type()->type() != C3TypeTypePointer && type->pointed_to_type()->type() == C3TypeTypeVoid)
+		)
 		&& (!rr_exp_type->pointed_to_type()->is_constant() || type->pointed_to_type()->is_constant())
 	) {
-		return new ASTStaticCast(expression, type);
+		return new ASTCast(expression, type);
 	}
 
 	if (expression->type->type() == C3TypeTypeNullPointer && type->type() == C3TypeTypePointer) {
-		return new ASTStaticCast(expression, type);
+		return new ASTCast(expression, type);
 	}
 	
 	if (rr_exp_type->is_integer() && type->is_integer()) {
-		return new ASTStaticCast(expression, type);
+		return new ASTCast(expression, type);
 	}
 	
 	return nullptr;
 }
 
-ASTVariableDec* Parser::_parse_variable_dec() {
-	auto type = _try_parse_type();
+ASTExpression* Parser::_explicit_conversion(ASTExpression* expression, C3TypePtr type) {
+	if (auto converted = _implicit_conversion(expression, type)) {
+		return converted;
+	}
 	
+	auto rr_exp_type = C3Type::RemoveReference(expression->type);
+	
+	if (rr_exp_type->type() == C3TypeTypePointer && type->type() == C3TypeTypeBool) {
+		return new ASTCast(expression, type);
+	}
+
+	return nullptr;
+}
+
+C3TypePtr Parser::_resolve_auto_type(C3TypePtr auto_type, C3TypePtr target) {
+	if (!auto_type->is_auto()) { return auto_type; }
+
+	if (auto_type->type() == C3TypeTypeReference) {
+		if (target->type() == C3TypeTypeReference) {
+			auto inner = _resolve_auto_type(auto_type->referenced_type(), target->referenced_type());
+			return inner ? C3Type::ModifiedType(C3Type::ReferenceType(inner), auto_type->modifiers()) : nullptr;
+		}
+		return nullptr;
+	}
+
+	if (auto_type->type() == C3TypeTypePointer) {
+		if (target->type() == C3TypeTypePointer) {
+			auto inner = _resolve_auto_type(auto_type->pointed_to_type(), target->pointed_to_type());
+			return inner ? C3Type::ModifiedType(C3Type::PointerType(inner), auto_type->modifiers()) : nullptr;
+		}
+		return nullptr;
+	}
+	
+	if (auto_type->type() == C3TypeTypeAuto) {
+		return C3Type::ModifiedType(C3Type::RemoveReference(target), auto_type->modifiers());
+	}
+
+	return nullptr;
+}
+
+ASTVariableDec* Parser::_parse_variable_dec() {
+	bool is_static = _scopes.size() == 1;
+
+	if (_peek(ptt_keyword_static)) {
+		is_static = true;
+		_consume(1); // static
+	}
+
+	auto type = _try_parse_type();
+
 	if (!type) {
 		_errors.push_back(ParseError("expected type", _token()));
 		return nullptr;
@@ -465,33 +539,50 @@ ASTVariableDec* Parser::_parse_variable_dec() {
 		return nullptr;
 	}
 
-	TokenPtr tok = _consume_token();
+	TokenPtr name_tok = _consume_token();
 
 	Scope& scope = _scopes.back();
-
-	C3VariablePtr var = C3VariablePtr(new C3Variable(type, tok->value(), scope.global_prefix() + tok->value(), tok));
-
-	scope.variables[scope.local_prefix() + var->name()] = var;
+	
+	ASTExpression* init = nullptr;
 	
 	if (_peek(ptt_assignment)) {
 		// initial value
 		_consume(1); // consume '='
-		auto init = _parse_expression();
+		init = _parse_expression();
 		if (!init) {
 			return nullptr;
 		}
-		auto converted = _try_implicit_conversion(init, type);
+		if (type->is_auto()) {
+			auto resolved = _resolve_auto_type(type, init->type);
+			if (!resolved) {
+				_errors.push_back(ParseError("unable to resolve auto type", name_tok));
+				delete init;
+				return nullptr;
+			}
+			type = resolved;
+		}
+		auto converted = _implicit_conversion(init, type);
 		if (!converted) {
-			std::string msg("unable to initialize variable of type ''");
+			std::string msg("unable to initialize variable of type '");
 			msg += type->name() + "' with expression of type '" + init->type->name() + "'";
-			_errors.push_back(ParseError(msg.c_str(), _token()));
+			_errors.push_back(ParseError(msg.c_str(), name_tok));
 			delete init;
 			return nullptr;
 		}
-		return new ASTVariableDec(var, converted);
+		init = converted;
+		if (is_static && !init->is_constant) {
+			_errors.push_back(ParseError("unable to initialize static variable with non-constant expression", name_tok));
+			delete init;
+			return nullptr;
+		}
+	} else if (type->is_auto()) {
+		_errors.push_back(ParseError("variables with auto types must have an initialization", name_tok));
 	}
 
-	return new ASTVariableDec(var);
+	C3VariablePtr var = C3VariablePtr(new C3Variable(type, name_tok->value(), scope.global_prefix() + name_tok->value(), name_tok, is_static));
+	scope.variables[scope.local_prefix() + var->name()] = var;
+
+	return new ASTVariableDec(var, init);
 }
 
 ASTNode* Parser::_parse_function_proto_or_def(bool* was_just_proto) {
@@ -555,6 +646,11 @@ ASTFunctionProto* Parser::_parse_function_proto(bool* args_are_named) {
 		return nullptr;
 	}
 	
+	if (return_type->is_auto()) {
+		_errors.push_back(ParseError("cannot declare an auto return type", _token()));
+		return nullptr;
+	}
+	
 	if (!_peek(ptt_undefd_func_name)) {
 		_errors.push_back(ParseError("expected undefined function name", _token()));
 		return nullptr;
@@ -579,7 +675,12 @@ ASTFunctionProto* Parser::_parse_function_proto(bool* args_are_named) {
 			_errors.push_back(ParseError("expected argument type", _token()));
 			return nullptr;
 		}
-		
+
+		if (arg_type->is_auto()) {
+			_errors.push_back(ParseError("cannot declare an auto argument type", _token()));
+			return nullptr;
+		}
+
 		bool named = false;
 		if (_peek(ptt_identifier) && !_peek(ptt_type_name)) {
 			std::string name = _token()->value();
@@ -664,7 +765,7 @@ ASTFunctionCall* Parser::_parse_function_call(ASTExpression* func) {
 			}
 			return nullptr;
 		}
-		auto converted = _try_implicit_conversion(arg, arg_types[i]);
+		auto converted = _implicit_conversion(arg, arg_types[i]);
 		if (!converted) {
 			std::string msg = "invalid type for argument (expected '";
 			msg += arg_types[i]->name() + "' but got '" + arg->type->name() + "')";
@@ -713,9 +814,13 @@ ASTNode* Parser::_parse_struct_dec_or_def() {
 	
 	_push_scope(name->value());
 	while (!_peek(ptt_close_brace)) {
-		C3TypePtr type = nullptr;
-		if (!(type = _try_parse_type())) {
+		C3TypePtr type = _try_parse_type();
+		if (!type) {
 			_errors.push_back(ParseError("expected type", _token()));
+			return nullptr;
+		}
+		if (type->is_auto()) {
+			_errors.push_back(ParseError("cannot declare an auto member type", _token()));
 			return nullptr;
 		}
 		if (!_peek(ptt_new_variable_name)) {
@@ -806,7 +911,7 @@ ASTExpression* Parser::_parse_binop_rhs(ASTExpression* lhs) {
 	if (tok->value() == "=") {
 		if (!lhs->type->referenced_type() || lhs->type->is_constant()) {
 			compatible = false;
-		} else if (auto converted = _try_implicit_conversion(rhs, lhs->type->referenced_type())) {
+		} else if (auto converted = _implicit_conversion(rhs, lhs->type->referenced_type())) {
 			compatible = true;
 			rhs = converted;
 		} else {
@@ -1070,7 +1175,7 @@ ASTReturn* Parser::_parse_return() {
 		return nullptr;
 	}
 	
-	auto converted = _try_implicit_conversion(exp, expected_type);
+	auto converted = _implicit_conversion(exp, expected_type);
 	
 	if (!converted) {
 		std::string msg = "invalid return type (expected '";
@@ -1136,7 +1241,7 @@ ASTExpression* Parser::_parse_primary() {
 	return nullptr;
 }
 
-ASTStaticCast* Parser::_parse_static_cast() {
+ASTCast* Parser::_parse_static_cast() {
 	if (!_peek(ptt_keyword_static_cast)) {
 		_errors.push_back(ParseError("expected static_cast", _token()));
 		return nullptr;
@@ -1153,6 +1258,11 @@ ASTStaticCast* Parser::_parse_static_cast() {
 	auto type = _try_parse_type();
 	if (!type) {
 		_errors.push_back(ParseError("expected type", _token()));
+		return nullptr;
+	}
+
+	if (type->is_auto()) {
+		_errors.push_back(ParseError("cannot static cast to auto type", _token()));
 		return nullptr;
 	}
 
@@ -1188,7 +1298,7 @@ ASTStaticCast* Parser::_parse_static_cast() {
 
 	// TODO: enforce more of the limitations of static_cast
 
-	return new ASTStaticCast(expression, type);
+	return new ASTCast(expression, type);
 }
 		
 ASTExpression* Parser::_parse_expression(Precedence minPrecedence) {
@@ -1214,19 +1324,35 @@ ASTExpression* Parser::_parse_expression(Precedence minPrecedence) {
 		if (tok->value() == "&") {
 			if (!rhs->type->referenced_type()) {
 				_errors.push_back(ParseError("operand to '&' operator must be a reference", rhs_tok));
-				delete rhs;
 			} else {
 				exp = new ASTUnaryOp(tok->value(), rhs, C3Type::PointerType(rhs->type));
 			}
 		} else if (tok->value() == "*") {
 			if (C3Type::RemoveReference(rhs->type)->type() != C3TypeTypePointer) {
 				_errors.push_back(ParseError("operand to '*' operator must be a pointer type", rhs_tok));
-				delete rhs;
 			} else {
 				exp = new ASTUnaryOp(tok->value(), rhs, C3Type::ReferenceType(C3Type::RemoveReference(rhs->type)->pointed_to_type()));
 			}
-		} else {
-			exp = new ASTUnaryOp(tok->value(), rhs, rhs->type);
+		} else if (tok->value() == "!") {
+			auto converted = _explicit_conversion(rhs, C3Type::BoolType());
+			if (!converted) {
+				_errors.push_back(ParseError("operand to '!' operator must be convertible to bool", rhs_tok));
+			} else {
+				exp = new ASTUnaryOp(tok->value(), converted, C3Type::BoolType());
+			}
+		} else if (tok->value() == "-") {
+			auto rr_type = C3Type::RemoveReference(rhs->type);
+			if (!rr_type->is_integer() && !rr_type->is_floating_point()) {
+				_errors.push_back(ParseError("operand to unary '-' operator must be integer or floating point", rhs_tok));
+			} else {
+				rr_type->set_modifiers(0);
+				exp = new ASTUnaryOp(tok->value(), rhs, rr_type);
+			}
+		}
+		
+		if (!exp) {
+			delete rhs;
+			return nullptr;
 		}
 	}
 
@@ -1290,29 +1416,35 @@ ASTNode* Parser::_parse_statement() {
 	bool expect_semicolon = true;
 
 	if (_peek(ptt_keyword_import)) {
-		_consume(1); // import
-		if (!_peek(ptt_identifier)) {
-			_errors.push_back(ParseError("expected module name", _token()));
-			return nullptr;
-		}
+		auto import_token = _consume_token();
 		if (_scopes.size() > 1) {
-			_errors.push_back(ParseError("imports can only be made in the global scope", _token()));
+			_errors.push_back(ParseError("imports can only be made in the global scope", import_token));
 			return nullptr;
 		}
 		Scope& s = _scopes.back();
 		if (!s.current_namespace.empty()) {
-			_errors.push_back(ParseError("imports can only be made in the top level namespace", _token()));
+			_errors.push_back(ParseError("imports can only be made in the top level namespace", import_token));
 			return nullptr;
 		}
-		Preprocessor pp;
-		// TODO: some sort of module searching
-		if (!pp.process_file((std::string("modules/") + _token()->value() + "/" + _token()->value() + ".c3").c_str())) {
-			_errors.push_back(ParseError("unable to import module", _token()));
+		if (!_peek(ptt_identifier)) {
+			_errors.push_back(ParseError("expected module name", _token()));
 			return nullptr;
 		}
-		auto name = _token()->value();
-		_consume(1); // module name
-		node = generate_ast(pp.tokens());
+		auto name = _consume_token()->value();
+		if (_imported_modules.insert(name).second) {
+			Preprocessor pp;
+			// TODO: some sort of module searching
+			if (!pp.process_file((std::string("modules/") + name + "/" + name + ".c3").c_str())) {
+				_errors.push_back(ParseError("unable to import module", import_token));
+				return nullptr;
+			}
+			node = generate_ast(pp.tokens());
+			if (!node) {
+				return nullptr;
+			}
+		} else {
+			node = new ASTNop();
+		}
 	} else if (_peek(ptt_keyword_namespace)) {
 		_consume(1); // namespace
 		if (!_peek(ptt_new_namespace_name)) {
@@ -1331,26 +1463,30 @@ ASTNode* Parser::_parse_statement() {
 		s.current_namespace.push_back(name);
 		node = _parse_block();
 		s.current_namespace.pop_back();
-		if (!_peek(ptt_close_brace)) {
-			_errors.push_back(ParseError("expected closing brace", _token()));
-			delete node;
-			return nullptr;
+		if (node) {
+			if (!_peek(ptt_close_brace)) {
+				_errors.push_back(ParseError("expected closing brace", _token()));
+				delete node;
+				return nullptr;
+			}
+			_consume(1); // }
+			expect_semicolon = false;
 		}
-		_consume(1); // }
-		expect_semicolon = false;
 	} else if (_peek(ptt_open_brace)) {
 		// new code block
 		_consume(1); // {
 		_push_scope();
 		node = _parse_block();
 		_pop_scope();
-		if (!_peek(ptt_close_brace)) {
-			_errors.push_back(ParseError("expected closing brace", _token()));
-			delete node;
-			return nullptr;
+		if (node) {
+			if (!_peek(ptt_close_brace)) {
+				_errors.push_back(ParseError("expected closing brace", _token()));
+				delete node;
+				return nullptr;
+			}
+			_consume(1); // }
+			expect_semicolon = false;
 		}
-		_consume(1); // }
-		expect_semicolon = false;
 	} else if (_peek(ptt_keyword_if)) {
 		// if block
 		_consume(1); // if
@@ -1430,27 +1566,26 @@ ASTNode* Parser::_parse_statement() {
 		// struct declaration or definition
 		node = _parse_struct_dec_or_def();
 		expect_semicolon = false;
+	} else if (_peek(ptt_keyword_static)) {
+		// static variable declaration
+		node = _parse_variable_dec();
 	} else {
-		auto tok = _cur_tok;
-		C3TypePtr type = _try_parse_type();
-		if (type && _peek({ptt_identifier, ptt_open_paren})) {
-			_cur_tok = tok;
+		if (_peek({ptt_type, ptt_identifier, ptt_open_paren})) {
 			// function proto or def
 			bool just_proto = true;
 			node = _parse_function_proto_or_def(&just_proto);
 			expect_semicolon = just_proto;
-		} else if (type) {
-			_cur_tok = tok;
+		} else if (_peek(ptt_type)) {
 			// variable declaration
 			node = _parse_variable_dec();
 		} else {
-			_cur_tok = tok;
 			// expression
 			node = _parse_expression();
 		}
 	}
 
 	if (node && expect_semicolon && !_peek(ptt_semicolon)) {
+		node->print();
 		_errors.push_back(ParseError("expected semicolon", _token()));
 		// try to continue anyways
 	}

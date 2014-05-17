@@ -40,6 +40,7 @@ class Parser {
 			ptt_equality,
 			ptt_inequality,
 			ptt_namespace_delimiter,
+			ptt_type,
 			ptt_type_name,
 			ptt_new_namespace_name,
 			ptt_new_variable_name,
@@ -55,6 +56,7 @@ class Parser {
 			ptt_char_constant,
 			ptt_keyword,
 			ptt_keyword_asm,
+			ptt_keyword_auto,
 			ptt_keyword_const,
 			ptt_keyword_extern,
 			ptt_keyword_return,
@@ -62,6 +64,7 @@ class Parser {
 			ptt_keyword_if,
 			ptt_keyword_else,
 			ptt_keyword_while,
+			ptt_keyword_static,
 			ptt_keyword_static_cast,
 			ptt_keyword_struct,
 			ptt_keyword_namespace,
@@ -105,6 +108,8 @@ class Parser {
 
 		std::unordered_set<std::string> _keywords;
 
+		std::unordered_set<std::string> _imported_modules;
+
 		typedef std::list<TokenPtr>::const_iterator TokenIterator;
 		
 		TokenIterator _cur_tok;
@@ -115,7 +120,7 @@ class Parser {
 		void _consume(size_t tokens);
 		TokenPtr _consume_token();
 
-		bool _peek(ParserTokenType type);
+		bool _peek(ParserTokenType type, TokenIterator* next = nullptr);
 		bool _peek(std::initializer_list<ParserTokenType> types);
 
 		Scope& _push_scope(const std::string& name = "");
@@ -136,7 +141,14 @@ class Parser {
 		/**
 		* Takes ownership of `from` only if successful.
 		*/
-		ASTExpression* _try_implicit_conversion(ASTExpression* from, C3TypePtr to);
+		ASTExpression* _implicit_conversion(ASTExpression* from, C3TypePtr to);
+
+		/**
+		* Takes ownership of `from` only if successful.
+		*/
+		ASTExpression* _explicit_conversion(ASTExpression* from, C3TypePtr to);
+		
+		C3TypePtr _resolve_auto_type(C3TypePtr auto_type, C3TypePtr target);
 
 		ASTVariableDec* _parse_variable_dec();
 		ASTNode* _parse_function_proto_or_def(bool* was_just_proto);
@@ -146,7 +158,7 @@ class Parser {
 
 		ASTExpression* _parse_expression(Precedence minPrecedence = { 0, false });
 		ASTExpression* _parse_primary();
-		ASTStaticCast* _parse_static_cast();
+		ASTCast* _parse_static_cast();
 
 		ASTExpression* _parse_inline_asm_operand(std::string* constraint);
 		ASTInlineAsm* _parse_inline_asm();

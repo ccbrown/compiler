@@ -10,8 +10,8 @@ namespace system {
 	const int32 stdout = 1;
 	const int32 stderr = 2;
 
-	void print(const char* string) {
-		extern uint64 _strlen(const char* string) : "strlen";
+	void print(const uint8* string) {
+		extern uint64 _strlen(const uint8* string) : "strlen";
 		write(stdout, string, _strlen(string));
 		write(stdout, "\n", 1);
 	}

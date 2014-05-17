@@ -8,6 +8,7 @@ enum C3TypeType {
 	C3TypeTypeReference,
 	C3TypeTypeFunction,
 	C3TypeTypeStruct,
+	C3TypeTypeAuto,
 	C3TypeTypeVoid,
 	C3TypeTypeNullPointer,
 	C3TypeTypeBool,
@@ -32,7 +33,7 @@ class C3Type;
 
 class C3Type {
 	public:
-		const std::string& name() const { return _name; }
+		std::string name() const;
 		const std::string& global_name() const { return _global_name; }
 		C3TypeType type() const { return _type; }
 		size_t size() const;
@@ -44,10 +45,14 @@ class C3Type {
 
 		bool is_integer() const;
 		bool is_floating_point() const;
+		bool is_auto() const;
 
 		bool is_constant() const;
 		bool is_signed() const;
 		bool is_defined() const;
+		
+		int modifiers() const { return _modifiers; }
+		void set_modifiers(int modifiers);
 
 		void define(const C3StructDefinition& definition);
 		const C3StructDefinition& struct_definition() const { return _struct_def; }
@@ -60,6 +65,7 @@ class C3Type {
 		static C3TypePtr FunctionType(const C3FunctionSignature& signature);
 		static C3TypePtr StructType(const std::string& name, const std::string& global_name, const C3StructDefinition& definition);
 		static C3TypePtr ModifiedType(C3TypePtr type, int modifiers);
+		static C3TypePtr AutoType();
 		static C3TypePtr VoidType();
 		static C3TypePtr NullPointerType();
 		static C3TypePtr BoolType();
@@ -80,8 +86,8 @@ class C3Type {
 		std::string _global_name;
 		C3TypeType _type;
 		
-		bool _is_constant = false;
-		bool _is_signed = true;
+		int _modifiers = 0;
+
 		bool _is_defined = false;
 
 		C3TypePtr _pointer;
