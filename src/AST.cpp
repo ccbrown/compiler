@@ -225,7 +225,7 @@ ASTFunctionCall::~ASTFunctionCall() {
 }
 
 void ASTCast::print(int indentation) {
-	printf("%*sstatic cast: %s\n", indentation * 2, "", type->name().c_str());
+	printf("%*scast: %s\n", indentation * 2, "", type->name().c_str());
 	original->print(indentation + 1);
 }
 

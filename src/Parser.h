@@ -129,7 +129,7 @@ class Parser {
 
 		std::string _try_parse_full_name();
 
-		C3TypePtr _resolveType(const std::string& name);
+		C3TypePtr _resolve_type(const std::string& name);
 		C3TypePtr _try_parse_type();
 
 		C3VariablePtr _resolveVariable(const std::string& name);

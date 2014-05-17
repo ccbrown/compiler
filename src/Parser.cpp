@@ -244,7 +244,7 @@ bool Parser::_peek(ParserTokenType type, TokenIterator* next) {
 			return ret;
 		}
 		case ptt_type_name: {
-			return (bool)_resolveType(tok->value());
+			return (bool)_resolve_type(tok->value());
 		}
 	}
 	
@@ -306,7 +306,7 @@ std::string Parser::_try_parse_full_name() {
 	return ret;
 }
 
-C3TypePtr Parser::_resolveType(const std::string& name) {
+C3TypePtr Parser::_resolve_type(const std::string& name) {
 	for (auto it = _scopes.rbegin(); it != _scopes.rend(); ++it) {
 		auto& scope = *it;
 		auto namespace_copy = scope.current_namespace;
@@ -343,7 +343,7 @@ C3TypePtr Parser::_try_parse_type() {
 
 	if (name.empty()) { return nullptr; }
 
-	C3TypePtr type = _resolveType(name);
+	C3TypePtr type = _resolve_type(name);
 
 	if (!type) {
 		_cur_tok = start;
@@ -475,7 +475,7 @@ ASTExpression* Parser::_implicit_conversion(ASTExpression* expression, C3TypePtr
 	if (rr_exp_type->is_integer() && type->is_integer()) {
 		return new ASTCast(expression, type);
 	}
-	
+
 	return nullptr;
 }
 
@@ -486,7 +486,7 @@ ASTExpression* Parser::_explicit_conversion(ASTExpression* expression, C3TypePtr
 	
 	auto rr_exp_type = C3Type::RemoveReference(expression->type);
 	
-	if (rr_exp_type->type() == C3TypeTypePointer && type->type() == C3TypeTypeBool) {
+	if ((rr_exp_type->is_integer() || rr_exp_type->is_floating_point() || rr_exp_type->pointed_to_type()) && type->type() == C3TypeTypeBool) {
 		return new ASTCast(expression, type);
 	}
 

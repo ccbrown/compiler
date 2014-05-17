@@ -365,12 +365,22 @@ const void* LLVMCodeGenerator::visit(ASTCast* node) {
 		return llvm::ConstantExpr::getIntegerCast(static_cast<llvm::Constant*>(_value(node->original)), _llvm_type(node->type), node->original->type->is_signed());
 	}
 	
+	auto rr_type = C3Type::RemoveReference(node->original->type);
+	
 	if (node->type->type() == C3TypeTypePointer) {
 		return _builder.CreatePointerCast(_dereferenced_value(node->original), _llvm_type(node->type));
 	}
 
-	if (node->type->type() == C3TypeTypeBool && C3Type::RemoveReference(node->original->type)->type() == C3TypeTypePointer) {
+	if (node->type->type() == C3TypeTypeBool && rr_type->type() == C3TypeTypePointer) {
 		return _builder.CreateIsNotNull(_dereferenced_value(node->original));
+	}
+
+	if (node->type->type() == C3TypeTypeBool && rr_type->is_integer()) {
+		return _builder.CreateICmpNE(_dereferenced_value(node->original), llvm::ConstantInt::get(_llvm_type(rr_type), 0));
+	}
+
+	if (node->type->type() == C3TypeTypeBool && rr_type->is_floating_point()) {
+		return _builder.CreateFCmpONE(_dereferenced_value(node->original), llvm::ConstantFP::get(_llvm_type(rr_type), 0.0));
 	}
 
 	return _builder.CreateIntCast(_dereferenced_value(node->original), _llvm_type(node->type), node->original->type->is_signed());
