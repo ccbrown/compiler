@@ -24,6 +24,7 @@ Parser::Parser() {
 	}
 	
 	_keywords.insert("asm");
+	_keywords.insert("class");
 	_keywords.insert("const");
 	_keywords.insert("extern");
 	_keywords.insert("return");
@@ -33,7 +34,6 @@ Parser::Parser() {
 	_keywords.insert("while");
 	_keywords.insert("static");
 	_keywords.insert("static_cast");
-	_keywords.insert("struct");
 	_keywords.insert("namespace");
 	_keywords.insert("nullptr");
 
@@ -158,6 +158,8 @@ bool Parser::_peek(ParserTokenType type, TokenIterator* next) {
 			return _peek(ptt_keyword) && tok->value() == "asm";
 		case ptt_keyword_auto:
 			return _peek(ptt_keyword) && tok->value() == "auto";
+		case ptt_keyword_class:
+			return _peek(ptt_keyword) && tok->value() == "class";
 		case ptt_keyword_const:
 			return _peek(ptt_keyword) && tok->value() == "const";
 		case ptt_keyword_extern:
@@ -176,8 +178,6 @@ bool Parser::_peek(ParserTokenType type, TokenIterator* next) {
 			return _peek(ptt_keyword) && tok->value() == "static";
 		case ptt_keyword_static_cast:
 			return _peek(ptt_keyword) && tok->value() == "static_cast";
-		case ptt_keyword_struct:
-			return _peek(ptt_keyword) && tok->value() == "struct";
 		case ptt_keyword_namespace:
 			return _peek(ptt_keyword) && tok->value() == "namespace";
 		case ptt_keyword_nullptr:
@@ -787,10 +787,10 @@ ASTFunctionCall* Parser::_parse_function_call(ASTExpression* func) {
 	return new ASTFunctionCall(func, args);
 }
 
-ASTNode* Parser::_parse_struct_dec_or_def() {
+ASTNode* Parser::_parse_class_dec_or_def() {
 	// TODO: allow separate declarations / definitions
 
-	if (!_peek(ptt_keyword_struct)) {
+	if (!_peek(ptt_keyword_class)) {
 		return nullptr;
 	}
 	
@@ -1562,9 +1562,9 @@ ASTNode* Parser::_parse_statement() {
 	} else if (_peek(ptt_keyword_return)) {
 		// return statement
 		node = _parse_return();
-	} else if (_peek(ptt_keyword_struct)) {
+	} else if (_peek(ptt_keyword_class)) {
 		// struct declaration or definition
-		node = _parse_struct_dec_or_def();
+		node = _parse_class_dec_or_def();
 		expect_semicolon = false;
 	} else if (_peek(ptt_keyword_static)) {
 		// static variable declaration

@@ -57,6 +57,7 @@ class Parser {
 			ptt_keyword,
 			ptt_keyword_asm,
 			ptt_keyword_auto,
+			ptt_keyword_class,
 			ptt_keyword_const,
 			ptt_keyword_extern,
 			ptt_keyword_return,
@@ -66,7 +67,6 @@ class Parser {
 			ptt_keyword_while,
 			ptt_keyword_static,
 			ptt_keyword_static_cast,
-			ptt_keyword_struct,
 			ptt_keyword_namespace,
 			ptt_keyword_nullptr,
 		};
@@ -154,7 +154,7 @@ class Parser {
 		ASTNode* _parse_function_proto_or_def(bool* was_just_proto);
 		ASTFunctionProto* _parse_function_proto(bool* args_are_named = nullptr);
 		ASTFunctionCall* _parse_function_call(ASTExpression* func);
-		ASTNode* _parse_struct_dec_or_def();
+		ASTNode* _parse_class_dec_or_def();
 
 		ASTExpression* _parse_expression(Precedence minPrecedence = { 0, false });
 		ASTExpression* _parse_primary();
